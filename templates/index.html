@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Character List - One Piece Character Tracker{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1>One Piece Character Values</h1>
+    
+    {% if message %}
+        <div class="no-data">
+            <h2>No Character Data Available</h2>
+            <p>{{ message }}</p>
+        </div>
+    {% elif characters %}
+        <div class="character-stats">
+            <p>Total Characters: <span id="total-count">{{ characters|length }}</span></p>
+            <p>Showing: <span id="visible-count">{{ characters|length }}</span> characters</p>
+            <div class="stats-actions">
+                <a href="{{ url_for('charts') }}" class="btn btn-primary">View Charts & Compare</a>
+            </div>
+        </div>
+        
+        <!-- Search and Filter Controls -->
+        <div class="search-filter-controls">
+            <div class="search-box">
+                <input type="text" id="character-search" placeholder="Search characters..." />
+                <button type="button" id="clear-search" class="btn btn-secondary">Clear</button>
+            </div>
+            
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label for="sort-by">Sort by:</label>
+                    <select id="sort-by">
+                        <option value="value-desc">Value (High to Low)</option>
+                        <option value="value-asc">Value (Low to High)</option>
+                        <option value="name-asc">Name (A to Z)</option>
+                        <option value="name-desc">Name (Z to A)</option>
+                        <option value="chapter-asc">First Appearance (Early to Late)</option>
+                        <option value="chapter-desc">First Appearance (Late to Early)</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="value-filter">Value Range:</label>
+                    <select id="value-filter">
+                        <option value="all">All Values</option>
+                        <option value="high">High (500+)</option>
+                        <option value="medium">Medium (100-499)</option>
+                        <option value="low">Low (1-99)</option>
+                        <option value="zero">Zero or Negative</option>
+                    </select>
+                </div>
+                
+                <div class="filter-group">
+                    <label for="chapter-filter">Introduction Era:</label>
+                    <select id="chapter-filter">
+                        <option value="all">All Eras</option>
+                        <option value="early">Early (Ch 1-100)</option>
+                        <option value="pre-timeskip">Pre-Timeskip (Ch 101-597)</option>
+                        <option value="post-timeskip">Post-Timeskip (Ch 598+)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <div class="character-list">
+            <div class="list-header">
+                <div class="header-name">Character</div>
+                <div class="header-value">Current Value</div>
+                <div class="header-chapter">First Appearance</div>
+                <div class="header-actions">Actions</div>
+            </div>
+            
+            {% for character in characters %}
+            <div class="character-item" 
+                 data-name="{{ character.name|lower }}" 
+                 data-value="{{ character.current_value }}" 
+                 data-chapter="{{ character.first_appearance }}">
+                <div class="character-name">
+                    <a href="{{ url_for('character_detail', wiki_url=character.wiki_url) }}">
+                        {{ character.name }}
+                    </a>
+                </div>
+                <div class="character-value">
+                    {{ character.current_value }}
+                </div>
+                <div class="character-chapter">
+                    Chapter {{ character.first_appearance }}
+                </div>
+                <div class="character-actions">
+                    <a href="{{ url_for('character_detail', wiki_url=character.wiki_url) }}" class="btn btn-primary">
+                        View History
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div id="no-results" class="no-data" style="display: none;">
+            <h2>No Characters Found</h2>
+            <p>No characters match your current search and filter criteria.</p>
+            <p>Try adjusting your search terms or filters.</p>
+        </div>
+    {% else %}
+        <div class="no-data">
+            <h2>No Character Data Available</h2>
+            <p>It looks like the data gathering script hasn't been run yet.</p>
+            <p>Run the Python script to populate the database with character information.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('character-search');
+    const clearButton = document.getElementById('clear-search');
+    const sortSelect = document.getElementById('sort-by');
+    const valueFilter = document.getElementById('value-filter');
+    const chapterFilter = document.getElementById('chapter-filter');
+    const characterItems = document.querySelectorAll('.character-item');
+    const totalCount = document.getElementById('total-count');
+    const visibleCount = document.getElementById('visible-count');
+    const noResults = document.getElementById('no-results');
+    const characterList = document.querySelector('.character-list');
+    
+    // Search functionality
+    function filterCharacters() {
+        const searchTerm = searchInput.value.toLowerCase();
+        const sortBy = sortSelect.value;
+        const valueRange = valueFilter.value;
+        const chapterRange = chapterFilter.value;
+        
+        let visibleItems = [];
+        
+        characterItems.forEach(item => {
+            const name = item.dataset.name;
+            const value = parseInt(item.dataset.value);
+            const chapter = parseInt(item.dataset.chapter);
+            
+            let show = true;
+            
+            // Search filter
+            if (searchTerm && !name.includes(searchTerm)) {
+                show = false;
+            }
+            
+            // Value range filter
+            if (valueRange !== 'all') {
+                switch(valueRange) {
+                    case 'high':
+                        if (value < 500) show = false;
+                        break;
+                    case 'medium':
+                        if (value < 100 || value >= 500) show = false;
+                        break;
+                    case 'low':
+                        if (value < 1 || value >= 100) show = false;
+                        break;
+                    case 'zero':
+                        if (value > 0) show = false;
+                        break;
+                }
+            }
+            
+            // Chapter range filter
+            if (chapterRange !== 'all') {
+                switch(chapterRange) {
+                    case 'early':
+                        if (chapter > 100) show = false;
+                        break;
+                    case 'pre-timeskip':
+                        if (chapter <= 100 || chapter > 597) show = false;
+                        break;
+                    case 'post-timeskip':
+                        if (chapter <= 597) show = false;
+                        break;
+                }
+            }
+            
+            if (show) {
+                visibleItems.push(item);
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+        
+        // Sort visible items
+        visibleItems.sort((a, b) => {
+            const aName = a.querySelector('.character-name a').textContent;
+            const bName = b.querySelector('.character-name a').textContent;
+            const aValue = parseInt(a.dataset.value);
+            const bValue = parseInt(b.dataset.value);
+            const aChapter = parseInt(a.dataset.chapter);
+            const bChapter = parseInt(b.dataset.chapter);
+            
+            switch(sortBy) {
+                case 'value-desc':
+                    return bValue - aValue;
+                case 'value-asc':
+                    return aValue - bValue;
+                case 'name-asc':
+                    return aName.localeCompare(bName);
+                case 'name-desc':
+                    return bName.localeCompare(aName);
+                case 'chapter-asc':
+                    return aChapter - bChapter;
+                case 'chapter-desc':
+                    return bChapter - aChapter;
+                default:
+                    return bValue - aValue;
+            }
+        });
+        
+        // Reorder DOM elements
+        const listHeader = document.querySelector('.list-header');
+        visibleItems.forEach(item => {
+            characterList.appendChild(item);
+        });
+        
+        // Update counts and show/hide no results
+        visibleCount.textContent = visibleItems.length;
+        
+        if (visibleItems.length === 0) {
+            characterList.style.display = 'none';
+            noResults.style.display = 'block';
+        } else {
+            characterList.style.display = 'block';
+            noResults.style.display = 'none';
+        }
+    }
+    
+    // Event listeners
+    searchInput.addEventListener('input', filterCharacters);
+    clearButton.addEventListener('click', function() {
+        searchInput.value = '';
+        filterCharacters();
+    });
+    sortSelect.addEventListener('change', filterCharacters);
+    valueFilter.addEventListener('change', filterCharacters);
+    chapterFilter.addEventListener('change', filterCharacters);
+    
+    // Initial filter
+    filterCharacters();
+});
+</script>
+{% endblock %}

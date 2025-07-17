@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}{{ character.name }} - One Piece Character Tracker{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Character Navigation -->
+    <div class="character-navigation">
+        <div class="nav-item">
+            {% if prev_character %}
+                <a href="{{ url_for('character_detail', wiki_url=prev_character.wiki_url) }}" class="nav-link prev-character">
+                    <span class="nav-direction">← Lower Value</span>
+                    <span class="nav-character">{{ prev_character.name }}</span>
+                    <span class="nav-value">{{ prev_character.current_value }}</span>
+                </a>
+            {% else %}
+                <div class="nav-link disabled">
+                    <span class="nav-direction">← Lowest Value</span>
+                </div>
+            {% endif %}
+        </div>
+        
+        <div class="nav-center">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">All Characters</a>
+        </div>
+        
+        <div class="nav-item">
+            {% if next_character %}
+                <a href="{{ url_for('character_detail', wiki_url=next_character.wiki_url) }}" class="nav-link next-character">
+                    <span class="nav-direction">Higher Value →</span>
+                    <span class="nav-character">{{ next_character.name }}</span>
+                    <span class="nav-value">{{ next_character.current_value }}</span>
+                </a>
+            {% else %}
+                <div class="nav-link disabled">
+                    <span class="nav-direction">Highest Value →</span>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="character-header">
+        <h1>{{ character.name }}</h1>
+        <div class="character-info">
+            <div class="info-item">
+                <strong>Current Value:</strong> 
+                <span class="character-value">{{ character.current_value }}</span>
+            </div>
+            <div class="info-item">
+                <strong>First Appearance:</strong> Chapter {{ character.first_appearance }}
+            </div>
+            {% if stats %}
+            <div class="info-item">
+                <strong>Total Changes:</strong> {{ stats.total_changes }}
+            </div>
+            <div class="info-item">
+                <strong>Average Change:</strong> 
+                <span class="{% if stats.avg_change > 0 %}positive{% elif stats.avg_change < 0 %}negative{% else %}neutral{% endif %}">
+                    {% if stats.avg_change > 0 %}+{% endif %}{{ stats.avg_change }}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+        
+        {% if stats %}
+        <div class="character-stats-summary">
+            <div class="stat-item">
+                <div class="stat-value positive">+{{ stats.positive_changes }}</div>
+                <div class="stat-label">Positive Changes</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value negative">{{ stats.negative_changes }}</div>
+                <div class="stat-label">Negative Changes</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value neutral">{{ stats.chapter_span }}</div>
+                <div class="stat-label">Chapter Span</div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if history %}
+        <div class="character-chart-section">
+            <h2>Value Chart</h2>
+            <div class="chart-container">
+                <canvas id="character-chart"></canvas>
+            </div>
+        </div>
+        
+        <div class="character-history">
+            <h2>Value History</h2>
+            <div class="history-list">
+                {% for entry in history %}
+                <div class="history-item">
+                    <div class="history-header">
+                        <div class="history-chapter">
+                            <strong>Chapter {{ entry.chapter_number }}</strong>
+                            {% if entry.chapter_title %}
+                                <span class="chapter-title">{{ entry.chapter_title }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="history-change">
+                            <span class="change-value {% if entry.value_change > 0 %}positive{% elif entry.value_change < 0 %}negative{% else %}neutral{% endif %}">
+                                {% if entry.value_change > 0 %}+{% endif %}{{ entry.value_change }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="history-reasoning">
+                        {{ entry.reasoning }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <div class="no-history">
+            <h2>No History Available</h2>
+            <p>This character doesn't have any recorded value changes yet.</p>
+        </div>
+    {% endif %}
+
+    {% if related_characters %}
+    <div class="related-characters">
+        <h2>Related Characters</h2>
+        <p class="related-description">Characters that appear in the same chapters as {{ character.name }}:</p>
+        <div class="related-list">
+            {% for related in related_characters %}
+            <div class="related-item">
+                <a href="{{ url_for('character_detail', wiki_url=related.wiki_url) }}" class="related-link">
+                    <div class="related-name">{{ related.name }}</div>
+                    <div class="related-value">{{ related.current_value }}</div>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="navigation-links">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">← Back to Character List</a>
+        <a href="{{ url_for('charts') }}" class="btn btn-primary">Compare with Others</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if history %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chartCanvas = document.getElementById('character-chart');
+    
+    // Fetch character history data
+    async function loadCharacterChart() {
+        try {
+            const response = await fetch(`/api/character/{{ character.wiki_url|urlencode }}/history`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            
+            if (!data.history || data.history.length === 0) {
+                chartCanvas.parentElement.innerHTML = '<p>No chart data available</p>';
+                return;
+            }
+            
+            // Prepare chart data
+            const chartData = data.history.map(point => ({
+                x: point.chapter,
+                y: point.value,
+                change: point.change,
+                reasoning: point.reasoning
+            }));
+            
+            // Create chart
+            const ctx = chartCanvas.getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: '{{ character.name }}',
+                        data: chartData,
+                        borderColor: '#3498db',
+                        backgroundColor: '#3498db20',
+                        fill: false,
+                        tension: 0.1,
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '{{ character.name }} - Value History'
+                        },
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return 'Chapter ' + context[0].label;
+                                },
+                                label: function(context) {
+                                    const change = context.raw.change || 0;
+                                    const changeText = change > 0 ? `(+${change})` : change < 0 ? `(${change})` : '';
+                                    return `Value: ${context.parsed.y} ${changeText}`;
+                                },
+                                afterLabel: function(context) {
+                                    const reasoning = context.raw.reasoning || '';
+                                    // Split long text into multiple lines for better readability
+                                    const maxLineLength = 60;
+                                    const words = reasoning.split(' ');
+                                    const lines = [];
+                                    let currentLine = '';
+                                    
+                                    words.forEach(word => {
+                                        if ((currentLine + word).length <= maxLineLength) {
+                                            currentLine += (currentLine ? ' ' : '') + word;
+                                        } else {
+                                            if (currentLine) lines.push(currentLine);
+                                            currentLine = word;
+                                        }
+                                    });
+                                    if (currentLine) lines.push(currentLine);
+                                    
+                                    return lines;
+                                }
+                            },
+                            bodyFont: {
+                                size: 12
+                            },
+                            titleFont: {
+                                size: 14,
+                                weight: 'bold'
+                            },
+                            padding: 12,
+                            cornerRadius: 6,
+                            displayColors: false,
+                            maxWidth: 400,
+                            multiKeyBackground: 'rgba(0,0,0,0.8)'
+                        }
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Chapter'
+                            },
+                            type: 'linear'
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: 'Character Value'
+                            },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error loading character chart:', error);
+            chartCanvas.parentElement.innerHTML = '<p>Error loading chart data</p>';
+        }
+    }
+    
+    loadCharacterChart();
+});
+</script>
+{% endif %}
+{% endblock %}
