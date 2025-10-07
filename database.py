@@ -338,10 +338,29 @@ class Database:
         stock_values.sort()
         n = len(stock_values)
         
+        def percentile(values, p):
+            """Calculate percentile from sorted values."""
+            if not values:
+                return 0.0
+            k = (len(values) - 1) * p
+            f = int(k)
+            c = k - f
+            if f + 1 < len(values):
+                return values[f] * (1 - c) + values[f + 1] * c
+            return values[f]
+        
         return {
             'average': sum(stock_values) / n if n > 0 else 0.0,
             'median': stock_values[n // 2] if n > 0 else 0.0,
-            'total_characters': n
+            'total_characters': n,
+            'p10': percentile(stock_values, 0.10),
+            'p25': percentile(stock_values, 0.25),
+            'p33': percentile(stock_values, 0.33),
+            'p50': percentile(stock_values, 0.50),
+            'p66': percentile(stock_values, 0.66),
+            'p75': percentile(stock_values, 0.75),
+            'p90': percentile(stock_values, 0.90),
+            'p99': percentile(stock_values, 0.99)
         }
         
     def save_market_context(self, chapter_id: int):

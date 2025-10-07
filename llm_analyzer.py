@@ -102,17 +102,21 @@ class LLMAnalyzer:
         Returns:
             List of valid named individual characters
         """
-        system_prompt = """You filter One Piece character lists to remove NOISE.
+        system_prompt = """You filter One Piece character lists to remove NOISE and IRRELEVANT characters.
 
 REMOVE:
 - Generic groups: "Pirates", "Marines", "Straw Hat Pirates", "Buggy's Crew"
 - Locations: "Orange Town", "Shells Town", "East Blue"
 - Military ranks: "Captain", "Lieutenant", "Seaman Recruit"
-- Generic terms: "Villagers", "Townsfolk", "Citizens"
+- Generic terms: "Villagers", "Townsfolk", "Citizens", "Animals"
+- **Background/cover story characters**: Characters ONLY mentioned briefly or in cover stories/flashbacks but NOT present in THIS chapter's main events
+- **Passive mentions**: Characters only talked ABOUT but who don't appear or take action
 
 KEEP:
-- Named individuals: "Monkey D. Luffy", "Roronoa Zoro", "Buggy", "Nami"
-- Even minor named characters: "Rika", "Helmeppo", "Koby"
+- Named individuals who APPEAR and DO SOMETHING in this chapter: "Monkey D. Luffy", "Roronoa Zoro", "Buggy", "Nami"
+- Even minor named characters IF they have a scene or action: "Rika", "Helmeppo", "Koby"
+
+Read the chapter summary carefully to determine who actually appears vs. who is just mentioned!
 
 Return JSON: {"keep": ["name1", "name2", ...]}
 """
@@ -122,10 +126,13 @@ Return JSON: {"keep": ["name1", "name2", ...]}
         
         user_prompt = f"""Chapter {chapter_data['chapter_id']}: {chapter_data['title']}
 
+CHAPTER SUMMARY:
+{chapter_data.get('raw_description', '')}
+
 Characters extracted from wiki:
 {char_list}
 
-Which are NAMED INDIVIDUALS (not groups/locations/ranks)?
+Which are NAMED INDIVIDUALS who ACTUALLY APPEAR and DO SOMETHING in this chapter (not just mentioned, not just in cover stories)?
 Return JSON: {{"keep": ["exact name from list", ...]}}"""
 
         if verbose:
@@ -246,8 +253,8 @@ Return JSON: {"stock_value": <integer 10-200>, "confidence": 0-1, "reasoning": "
 Chapter {chapter_data['chapter_id']}: {chapter_data['title']}
 
 MARKET CONTEXT (from previous chapters):
-- Protagonist stock: {protag_stock:.0f}
-- Market average: {market_avg:.0f}
+📊 PERCENTILES: p10={stats.get('p10', 0):.0f} | p25={stats.get('p25', 0):.0f} | p33={stats.get('p33', 0):.0f} | p50={stats.get('p50', 0):.0f} | p66={stats.get('p66', 0):.0f} | p75={stats.get('p75', 0):.0f} | p90={stats.get('p90', 0):.0f} | p99={stats.get('p99', 0):.0f}
+- Protagonist stock: {protag_stock:.0f} | Average: {market_avg:.0f} | Median: {stats.get('median', 0):.0f}
 - Total characters: {stats.get('total_characters', 0)}
 {top_stocks_text}
 {chapter_history_text}
@@ -256,7 +263,7 @@ CHAPTER SUMMARY:
 {chapter_data['raw_description']}
 
 What initial stock value for {character['name']}?
-⚠️ SCALE TO CURRENT MARKET: If market avg is 200, arc villains should be 150-250, not 50!
+⚠️ SCALE TO CURRENT MARKET PERCENTILES: Arc villains should target p75-p90 range. Henchmen around p33-p50. Minor characters below p33.
 Return JSON: {{"stock_value": <integer>, "confidence": 0-1, "reasoning": "..."}}"""
 
         for attempt in range(1, max_retries + 1):
@@ -360,18 +367,41 @@ Return JSON: {{"stock_value": <integer>, "confidence": 0-1, "reasoning": "..."}}
 - **Net outcome matters** - Focus on chapter's END result, not every micro-moment
 - **Heroic sacrifice = GAIN**, **Wise restraint = STRENGTH**, **Strategic deception = INTELLIGENCE**
 
-🎚️ **EXPECTATION SCALING** (CRITICAL - prevents runaway growth!):
-Higher stock = Higher expectations = Harder to gain, easier to lose
+🎚️ **EXPECTATION SCALING** (CRITICAL - prevents exponential growth!):
+**Higher stock = MUCH higher expectations = VERY hard to gain, EASY to lose**
 
-**Compare character's current stock to market average:**
-- **Far above average (2x+ market avg)**: Meeting expectations = 1.00-1.05x, only EXCEPTIONAL moments warrant 1.10x+
-  - Example: Top character beats a henchman = 1.02x (expected), loses to villain = 0.60x (harsh)
-- **Above average (1.5-2x market avg)**: Good performance = 1.05-1.10x, needs strong showing for 1.20x+
-- **Near average (0.8-1.5x market avg)**: Standard scaling, good moments = 1.10-1.20x
-- **Below average (<0.8x market avg)**: Underdog bonus! Strong showing = 1.20-1.40x easier to achieve
-  - Example: Weak character defeats strong opponent = 1.50x+ (major upset!)
+**Use PERCENTILES (see "MARKET CONTEXT" below) - NOT average!**
 
-**The higher they rise, the harder to climb further!**
+- **Top 10% (p90+)**: 🚫 **EXTREME RESTRICTIONS**
+  - Meeting expectations = **0.98-1.00x** (neutral to slight LOSS)
+  - Good performance = 1.00-1.02x (barely positive)
+  - ONLY **LEGENDARY** moments justify 1.05x+ (defeating arc villain, transcendent moment)
+  - Defeats are DEVASTATING = 0.30-0.50x
+
+- **Top 25% (p75-p90)**: ⚠️ **VERY HIGH RESTRICTIONS**
+  - Meeting expectations = 0.99-1.01x (nearly neutral)
+  - Strong performance = 1.01-1.05x
+  - Major victories = 1.05-1.15x
+  - Defeats are harsh = 0.50-0.70x
+
+- **Top 50% (p50-p75)**: ⚡ **MODERATE RESTRICTIONS**
+  - Meeting expectations = 1.00-1.02x
+  - Good performance = 1.02-1.08x
+  - Strong victories = 1.08-1.20x
+  - Defeats = 0.60-0.80x
+
+- **Top 66% (p33-p50)**: ✓ **STANDARD SCALING**
+  - Meeting expectations = 1.00-1.05x
+  - Good moments = 1.05-1.15x
+  - Strong victories = 1.15-1.30x
+
+- **Bottom 33% (p0-p33)**: 🔥 **MODEST UNDERDOG BONUS**
+  - Meeting expectations = 1.00-1.08x
+  - Good performance = 1.08-1.18x
+  - Strong showing = 1.18-1.30x (not 1.40x!)
+  - Major upsets possible but rare = 1.35x max
+
+**The market RESISTS growth at the top! Exponential compounding is the enemy!**
 
 📊 **MULTIPLIER RANGES:**
 - **Inactive**: 1.0 (not in chapter OR mentioned positively but no direct action)
@@ -454,16 +484,23 @@ Return JSON with an ARRAY of actions:
                     # Existing character with multiplier
                     chapter_history_text += f"  • {hist['character_name']} (Ch.{hist['chapter_id']}): {hist['multiplier']:.2f}x → {hist.get('reasoning', '')}\n"
         
-        # Calculate expectation tier for guidance
-        stock_ratio = character['current_stock'] / market_avg if market_avg > 0 else 1.0
-        if stock_ratio >= 2.0:
-            expectation_tier = "FAR ABOVE AVG (2x+) - High expectations! Needs EXCEPTIONAL moments for 1.10x+, meeting expectations = 1.00-1.05x"
-        elif stock_ratio >= 1.5:
-            expectation_tier = "ABOVE AVG (1.5-2x) - Elevated expectations. Good = 1.05-1.10x, needs strong showing for 1.20x+"
-        elif stock_ratio >= 0.8:
-            expectation_tier = "NEAR AVG (0.8-1.5x) - Standard scaling. Good moments = 1.10-1.20x"
+        # Calculate percentile-based expectation tier
+        current_stock = character['current_stock']
+        p90 = stats.get('p90', market_avg * 2)
+        p75 = stats.get('p75', market_avg * 1.5)
+        p50 = stats.get('p50', market_avg)
+        p33 = stats.get('p33', market_avg * 0.8)
+        
+        if current_stock >= p90:
+            expectation_tier = "🚫 TOP 10% (p90+) - EXTREME RESTRICTIONS! Meeting expectations = 0.98-1.00x, good = 1.00-1.02x, ONLY legendary = 1.05x+"
+        elif current_stock >= p75:
+            expectation_tier = "⚠️ TOP 25% (p75-p90) - VERY HIGH RESTRICTIONS! Meeting = 0.99-1.01x, strong = 1.01-1.05x, major wins = 1.05-1.15x"
+        elif current_stock >= p50:
+            expectation_tier = "⚡ TOP 50% (p50-p75) - MODERATE RESTRICTIONS! Meeting = 1.00-1.02x, good = 1.02-1.08x, strong = 1.08-1.20x"
+        elif current_stock >= p33:
+            expectation_tier = "✓ TOP 66% (p33-p50) - STANDARD SCALING! Meeting = 1.00-1.05x, good = 1.05-1.15x, strong = 1.15-1.30x"
         else:
-            expectation_tier = "BELOW AVG (<0.8x) - UNDERDOG BONUS! Strong showing = 1.20-1.40x easier!"
+            expectation_tier = "🔥 BOTTOM 33% (p0-p33) - MODEST UNDERDOG BONUS! Meeting = 1.00-1.08x, good = 1.08-1.18x, strong = 1.18-1.30x"
         
         user_prompt = f"""EXISTING CHARACTER: {character['name']}
 Current stock: {character['current_stock']:.1f}
@@ -472,7 +509,8 @@ Expectation tier: {expectation_tier}
 Chapter {chapter_data['chapter_id']}: {chapter_data['title']}
 
 MARKET CONTEXT (from previous chapters):
-- Market average: {market_avg:.0f}
+📊 PERCENTILES: p10={stats.get('p10', 0):.0f} | p25={stats.get('p25', 0):.0f} | p33={stats.get('p33', 0):.0f} | p50={stats.get('p50', 0):.0f} | p66={stats.get('p66', 0):.0f} | p75={stats.get('p75', 0):.0f} | p90={stats.get('p90', 0):.0f} | p99={stats.get('p99', 0):.0f}
+- Average: {market_avg:.0f} | Median: {stats.get('median', 0):.0f}
 - Total characters: {stats.get('total_characters', 0)}
 {top_stocks_text}
 {chapter_history_text}

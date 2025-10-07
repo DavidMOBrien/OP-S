@@ -12,13 +12,19 @@ def print_market_summary(db: Database):
     print("="*80)
     
     stats = db.get_market_statistics()
-    top_stocks = db.get_top_stocks(limit=20)
+    total_chars = stats['total_characters']
+    top_10_percent = max(1, int(total_chars * 0.10))  # At least 1
+    top_stocks = db.get_top_stocks(limit=top_10_percent)
     
-    print(f"\nTotal Characters Tracked: {stats['total_characters']}")
+    print(f"\nTotal Characters Tracked: {total_chars}")
     print(f"Average Stock Value: {stats['average']:.1f}")
     print(f"Median Stock Value: {stats['median']:.1f}")
     
-    print(f"\n📈 Top 20 Stocks:")
+    print(f"\n📊 PERCENTILES:")
+    print(f"  p10: {stats.get('p10', 0):.1f}  |  p25: {stats.get('p25', 0):.1f}  |  p33: {stats.get('p33', 0):.1f}  |  p50: {stats.get('p50', 0):.1f}")
+    print(f"  p66: {stats.get('p66', 0):.1f}  |  p75: {stats.get('p75', 0):.1f}  |  p90: {stats.get('p90', 0):.1f}  |  p99: {stats.get('p99', 0):.1f}")
+    
+    print(f"\n📈 Top {top_10_percent} Stocks (Top 10%):")
     print(f"{'Rank':<6} {'Character':<35} {'Stock Value':>12}")
     print("-" * 80)
     for i, stock in enumerate(top_stocks, 1):
