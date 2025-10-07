@@ -377,7 +377,30 @@ Higher stock = Higher expectations = Harder to gain, easier to lose
 - Maintain consistency across characters and chapters
 - Scale appropriately: bigger moments = bigger multipliers
 
-Return JSON: {"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": "..."}"""
+📝 **OUTPUT FORMAT - MULTI-ACTION ARRAY:**
+Characters do MULTIPLE things in a chapter. Track each significant action/moment separately!
+
+Return JSON with an ARRAY of actions:
+{
+  "actions": [
+    {
+      "description": "Detailed description of what happened (e.g., 'Captures Luffy and taunts him publicly')",
+      "multiplier": 1.15
+    },
+    {
+      "description": "Another action (e.g., 'Gets outsmarted by Nami and loses the treasure')",
+      "multiplier": 0.85
+    }
+  ],
+  "confidence": 0.85,
+  "reasoning": "Overall summary of how these actions combine"
+}
+
+**IMPORTANT**: 
+- List actions in CHRONOLOGICAL ORDER (beginning → end of chapter)
+- Each action gets its own multiplier
+- Final stock = current_stock × (action1_mult × action2_mult × ... × actionN_mult)
+- This creates a TUG-OF-WAR effect! Gaining upper hand then losing still affects stock!"""
 
         # Format recent history
         history_text = ""
@@ -445,9 +468,12 @@ MARKET CONTEXT (from previous chapters):
 CHAPTER SUMMARY:
 {chapter_data['raw_description']}
 
-What multiplier for {character['name']} based on this chapter?
-⚠️ REMEMBER: Apply EXPECTATION SCALING based on their tier above!
-Return JSON: {{"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": "..."}}"""
+What actions/moments did {character['name']} have in this chapter?
+⚠️ REMEMBER: 
+- Apply EXPECTATION SCALING based on their tier above!
+- List ALL significant actions chronologically
+- Each action gets its own multiplier
+Return JSON: {{"actions": [{{"description": "...", "multiplier": X.XX}}, ...], "confidence": 0-1, "reasoning": "..."}}"""
 
         for attempt in range(1, max_retries + 1):
             try:
@@ -464,16 +490,24 @@ Return JSON: {{"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": 
                 content = response.choices[0].message.content
                 result = json.loads(content)
                 
-                multiplier = float(result['multiplier'])
+                # Parse actions array
+                actions = result.get('actions', [])
+                if not actions:
+                    raise ValueError("No actions returned")
+                
+                # Validate and calculate final multiplier
+                final_multiplier = 1.0
+                for action in actions:
+                    mult = float(action['multiplier'])
+                    if mult < 0.05 or mult > 5.0:
+                        raise ValueError(f"Action multiplier out of range: {mult}")
+                    final_multiplier *= mult
+                
                 confidence = float(result['confidence'])
-                reasoning = result['reasoning']
-                
-                # Validate
-                if multiplier < 0.05 or multiplier > 5.0:
-                    raise ValueError(f"Multiplier out of range: {multiplier}")
-                
                 if confidence < 0 or confidence > 1:
                     confidence = max(0, min(1, confidence))
+                
+                reasoning = result['reasoning']
                 
                 # Save log
                 self._save_character_log(character['name'], chapter_data['chapter_id'],
@@ -482,7 +516,8 @@ Return JSON: {{"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": 
                 return {
                     'character_name': character['name'],
                     'character_href': character['href'],
-                    'stock_change': multiplier,
+                    'stock_change': final_multiplier,
+                    'actions': actions,  # Include individual actions
                     'confidence': confidence,
                     'reasoning': reasoning
                 }
@@ -500,6 +535,7 @@ Return JSON: {{"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": 
                         'character_name': character['name'],
                         'character_href': character['href'],
                         'stock_change': 1.0,
+                        'actions': [{'description': 'Failed analysis', 'multiplier': 1.0}],
                         'confidence': 0.3,
                         'reasoning': f"Failed analysis, using neutral (1.0) ({e})"
                     }
@@ -540,7 +576,11 @@ Return JSON: {{"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": 
             result = self.analyze_existing_character(char, chapter_data, market_context, verbose=False, max_retries=max_retries)
             results.append(result)
             if verbose:
-                print(f"{result['stock_change']:.2f}x")
+                actions = result.get('actions', [])
+                print(f"{result['stock_change']:.2f}x ({len(actions)} action{'s' if len(actions) != 1 else ''})")
+                # Print each action
+                for i, action in enumerate(actions, 1):
+                    print(f"       {i}. {action.get('description', 'No description')} → {action.get('multiplier', 1.0):.2f}x")
                 print(f"     └─ {result.get('reasoning', 'No reasoning provided')}")
         
         for char in new_chars:

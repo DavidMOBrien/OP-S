@@ -225,7 +225,13 @@ class DataGenerator:
                 if is_new:
                     print(f"  Initial Stock Value: {change['stock_change']:.1f}")
                 else:
-                    print(f"  Multiplier: {change['stock_change']:.2f}x")
+                    print(f"  Final Multiplier: {change['stock_change']:.2f}x")
+                    # Show action breakdown if available
+                    if 'actions' in change and change['actions']:
+                        print(f"  Actions breakdown:")
+                        for i, action in enumerate(change['actions'], 1):
+                            print(f"    {i}. {action['description']}")
+                            print(f"       → {action['multiplier']:.2f}x")
                 print(f"  Confidence: {change['confidence']:.2f}")
                 print(f"  Reasoning: {change['reasoning']}")
             print("="*80 + "\n")
