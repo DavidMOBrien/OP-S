@@ -1,475 +1,343 @@
-#!/usr/bin/env python3
-"""
-One Piece Wiki Crawler
-Scrapes chapter data from the One Piece wiki with chronological navigation
-"""
+"""Wiki crawler for One Piece chapter data."""
 
 import requests
-import time
-import logging
 from bs4 import BeautifulSoup
-from typing import Dict, List, Optional
-from urllib.parse import urljoin
+from typing import Dict, List, Tuple, Optional
+import time
 import re
+from urllib.parse import urljoin, urlparse
 
-logger = logging.getLogger(__name__)
 
 class WikiCrawler:
-    """Crawler for One Piece wiki chapter data"""
+    """Crawls One Piece Wiki for chapter information."""
     
-    def __init__(self, base_url: str = "https://onepiece.fandom.com", rate_limit: float = 1.0):
-        """Initialize the wiki crawler"""
-        self.base_url = base_url
-        self.rate_limit = rate_limit
+    BASE_URL = "https://onepiece.fandom.com"
+    
+    def __init__(self, delay: float = 1.0):
+        """
+        Initialize the crawler.
+        
+        Args:
+            delay: Delay between requests in seconds (be respectful)
+        """
+        self.delay = delay
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'OnePieceStockTracker/1.0 (Educational Project)'
         })
         
-    def scrape_chapter_page(self, chapter_url: str) -> Optional[Dict]:
-        """Scrape a single chapter page for data"""
-        max_retries = 3
-        retry_delay = 2.0
+    def get_chapter_list_page(self, start_chapter: int = 1) -> str:
+        """Get the chapter list page URL."""
+        # One Piece wiki chapter list
+        return f"{self.BASE_URL}/wiki/Chapters"
         
-        for attempt in range(max_retries):
-            try:
-                logger.info(f"Scraping chapter: {chapter_url} (attempt {attempt + 1}/{max_retries})")
-                
-                time.sleep(self.rate_limit)
-                response = self.session.get(chapter_url, timeout=30)
-                response.raise_for_status()
-                
-                soup = BeautifulSoup(response.content, 'html.parser')
-                
-                chapter_number = self._extract_chapter_number(chapter_url, soup)
-                if not chapter_number:
-                    logger.warning(f"Could not extract chapter number from {chapter_url}")
-                    return None
-                    
-                chapter_title = self._extract_chapter_title(soup)
-                chapter_summary = self._extract_chapter_summary(soup)
-                characters = self._extract_characters(soup)
-                next_chapter_url = self._find_next_chapter_url(soup)
-                
-                chapter_data = {
-                    'number': chapter_number,
-                    'title': chapter_title,
-                    'summary': chapter_summary,
-                    'characters': characters,
-                    'next_chapter_url': next_chapter_url,
-                    'wiki_url': chapter_url
-                }
-                
-                logger.info(f"Successfully scraped Chapter {chapter_number}: {chapter_title}")
-                logger.info(f"Found {len(characters)} characters")
-                
-                return chapter_data
-                
-            except requests.exceptions.Timeout as e:
-                logger.warning(f"Timeout for {chapter_url} (attempt {attempt + 1}): {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                return None
-                
-            except requests.exceptions.RequestException as e:
-                logger.warning(f"Request failed for {chapter_url} (attempt {attempt + 1}): {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2
-                    continue
-                return None
-                
-            except Exception as e:
-                logger.error(f"Unexpected error scraping {chapter_url}: {e}")
-                return None
+    def fetch_chapter_urls(self, max_chapters: Optional[int] = None) -> List[Tuple[int, str]]:
+        """
+        Fetch list of chapter URLs.
         
-        return None
-    
-    def _extract_chapter_number(self, url: str, soup: BeautifulSoup) -> Optional[int]:
-        """Extract chapter number from URL or page content"""
-        url_match = re.search(r'/wiki/Chapter_(\d+)', url)
-        if url_match:
-            return int(url_match.group(1))
-            
-        title_element = soup.find('h1', class_='page-header__title')
-        if title_element:
-            title_text = title_element.get_text()
-            title_match = re.search(r'Chapter (\d+)', title_text)
-            if title_match:
-                return int(title_match.group(1))
-                
-        return None
-    
-    def _extract_chapter_title(self, soup: BeautifulSoup) -> str:
-        """Extract chapter title from the page"""
-        title_element = soup.find('h1', class_='page-header__title')
-        if title_element:
-            return title_element.get_text().strip()
-            
-        title_tag = soup.find('title')
-        if title_tag:
-            title_text = title_tag.get_text()
-            title_text = re.sub(r'\s*\|\s*One Piece Wiki.*$', '', title_text)
-            return title_text.strip()
-            
-        return "Unknown Title"   
- 
-    def _extract_chapter_summary(self, soup: BeautifulSoup) -> str:
-        """Extract comprehensive chapter summary from the page"""
-        summary_parts = []
+        Since One Piece wiki uses predictable URLs (/wiki/Chapter_1, /wiki/Chapter_2, etc.),
+        we generate them directly instead of scraping a chapter list page.
         
-        content_area = soup.find('div', class_='mw-parser-output')
-        if not content_area:
-            logger.warning("Could not find main content area")
-            return "No summary available"
-        
-        # Get all paragraphs and relevant content
-        paragraphs = content_area.find_all('p')
-        
-        # Also look for div content that might contain story details
-        content_divs = content_area.find_all('div', recursive=False)
-        
-        # Process paragraphs first
-        for p in paragraphs:
-            text = p.get_text().strip()
-            if not text:
-                continue
-                
-            # Skip navigation and metadata sections
-            skip_phrases = [
-                'navigation', 'categories', 'see also', 'references', 'external links',
-                'chapter info', 'volume:', 'chapter:', 'japanese title', 'romanized title',
-                'viz title', 'release date', 'cover page', 'short summary'
-            ]
-            
-            if any(skip_phrase in text.lower() for skip_phrase in skip_phrases):
-                continue
-                
-            # Skip very short paragraphs that are likely metadata
-            if len(text) < 20:
-                continue
-                
-            summary_parts.append(text)
-            
-            # NO LIMIT - get the complete chapter content
-        
-        # If we don't have enough content, try div elements
-        if len(' '.join(summary_parts)) < 200:
-            for div in content_divs:
-                div_text = div.get_text().strip()
-                if div_text and len(div_text) > 50:
-                    # Skip divs that are clearly navigation or metadata
-                    if not any(skip_phrase in div_text.lower() for skip_phrase in skip_phrases):
-                        summary_parts.append(div_text)
-                        # NO LIMIT - get complete content
-        
-        summary = ' '.join(summary_parts)
-        
-        # Clean up the summary
-        summary = summary.replace('\n', ' ').replace('\t', ' ')
-        # Remove multiple spaces
-        import re
-        summary = re.sub(r'\s+', ' ', summary)
-        
-        logger.info(f"Extracted summary length: {len(summary)} characters")
-        
-        return summary.strip() if summary.strip() else "No summary available"
-    
-    def _extract_characters(self, soup: BeautifulSoup) -> List[Dict[str, str]]:
-        """Extract character list with their wiki URLs from the Characters box"""
-        characters = []
-        seen_urls = set()
-        
-        # First, try to find the CharTable (character table)
-        char_table = soup.find('table', class_='CharTable')
-        if char_table:
-            logger.info("Found CharTable, extracting characters from it")
-            characters = self._extract_from_char_table(char_table, seen_urls)
-        
-        # If no CharTable found, look for other character containers
-        if not characters:
-            logger.info("No CharTable found, looking for other character containers")
-            characters = self._extract_from_general_content(soup, seen_urls)
-        
-        # Remove duplicates based on character name
-        unique_characters = []
-        seen_names = set()
-        
-        for char in characters:
-            name_lower = char['name'].lower()
-            if name_lower not in seen_names:
-                unique_characters.append(char)
-                seen_names.add(name_lower)
-        
-        logger.info(f"Extracted {len(unique_characters)} unique characters")
-        return unique_characters
-    
-    def _extract_from_char_table(self, char_table: BeautifulSoup, seen_urls: set) -> List[Dict[str, str]]:
-        """Extract characters specifically from the CharTable"""
-        characters = []
-        
-        # Get all links from the character table
-        links = char_table.find_all('a', href=True)
-        
-        for link in links:
-            href = link.get('href')
-            if not href:
-                continue
-                
-            # Convert relative URLs to absolute
-            if href.startswith('/'):
-                full_url = urljoin(self.base_url, href)
-            else:
-                full_url = href
-            
-            # Only include character links, skip category/general links
-            if self._is_character_link_strict(href, link.get_text()):
-                if full_url not in seen_urls:
-                    character_name = link.get_text().strip()
-                    if character_name:
-                        characters.append({
-                            'name': character_name,
-                            'wiki_url': full_url
-                        })
-                        seen_urls.add(full_url)
-        
-        return characters
-    
-    def _extract_from_general_content(self, soup: BeautifulSoup, seen_urls: set) -> List[Dict[str, str]]:
-        """Fallback method to extract characters from general content"""
-        characters = []
-        
-        content_area = soup.find('div', class_='mw-parser-output')
-        if not content_area:
-            return characters
-        
-        links = content_area.find_all('a', href=True)
-        
-        for link in links:
-            href = link.get('href')
-            if not href:
-                continue
-                
-            if href.startswith('/'):
-                full_url = urljoin(self.base_url, href)
-            else:
-                full_url = href
-            
-            if self._is_character_link(href, link.get_text()):
-                if full_url not in seen_urls:
-                    character_name = link.get_text().strip()
-                    if character_name:
-                        characters.append({
-                            'name': character_name,
-                            'wiki_url': full_url
-                        })
-                        seen_urls.add(full_url)
-        
-        return characters
-    
-    def _is_character_link_strict(self, href: str, link_text: str) -> bool:
-        """Determine if a link is a character page (strict version for CharTable)"""
-        if not href or not link_text:
-            return False
-            
-        # Skip certain types of links
-        skip_patterns = [
-            r'/wiki/Category:', r'/wiki/File:', r'/wiki/Template:', r'/wiki/Help:',
-            r'/wiki/Special:', r'/wiki/User:', r'/wiki/Talk:', r'#'
-        ]
-        
-        for pattern in skip_patterns:
-            if re.search(pattern, href):
-                return False
-        
-        if not ('/wiki/' in href):
-            return False
-            
-        # Skip common non-character pages (more strict)
-        non_character_patterns = [
-            r'Chapter_\d+', r'Episode_\d+', r'Volume_\d+', r'Arc', r'Saga',
-            r'Island', r'Sea', r'Ocean', r'Devil_Fruit', r'Haki',
-            r'We_Are!', r'Episode_of_', r'Jolly_Roger', r'Gomu_Gomu_no_Mi',
-            r'Pirate', r'Marine', r'Animal_Species', r'Location', r'Ship',
-            r'Weapon', r'Technique', r'Organization', r'Government'
-        ]
-        
-        for pattern in non_character_patterns:
-            if re.search(pattern, href, re.IGNORECASE):
-                return False
-        
-        # Skip very short names or common words
-        if len(link_text.strip()) < 3:
-            return False
-            
-        # Skip generic category words
-        skip_words = [
-            'pirates', 'citizens', 'animals', 'outlaws', 'others',
-            'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'
-        ]
-        if link_text.lower().strip() in skip_words:
-            return False
-        
-        # Must have at least one capital letter (proper names)
-        if not re.search(r'[A-Z]', link_text):
-            return False
-            
-        return True
-    
-    def _is_character_link(self, href: str, link_text: str) -> bool:
-        """Determine if a link is likely a character page"""
-        if not href or not link_text:
-            return False
-            
-        # Skip certain types of links
-        skip_patterns = [
-            r'/wiki/Category:', r'/wiki/File:', r'/wiki/Template:', r'/wiki/Help:',
-            r'/wiki/Special:', r'/wiki/User:', r'/wiki/Talk:', r'#'
-        ]
-        
-        for pattern in skip_patterns:
-            if re.search(pattern, href):
-                if 'onepiece.fandom.com/wiki/' not in href:
-                    return False
-        
-        if not ('/wiki/' in href):
-            return False
-            
-        # Skip common non-character pages
-        non_character_patterns = [
-            r'Chapter_\d+', r'Episode_\d+', r'Volume_\d+', r'Arc$', r'Saga$',
-            r'Island$', r'Sea$', r'Ocean$', r'Devil_Fruit', r'Haki',
-            r'We_Are!', r'Episode_of_', r'Jolly_Roger', r'Gomu_Gomu_no_Mi'
-        ]
-        
-        for pattern in non_character_patterns:
-            if re.search(pattern, href, re.IGNORECASE):
-                return False
-        
-        if len(link_text.strip()) < 3:
-            return False
-            
-        skip_words = [
-            'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
-            'we are!', 'episode of luffy', 'jolly roger', 'gomu gomu no mi'
-        ]
-        if link_text.lower().strip() in skip_words:
-            return False
-        
-        if not re.search(r'[A-Z]', link_text):
-            return False
-            
-        return True
-    
-    def _find_next_chapter_url(self, soup: BeautifulSoup) -> Optional[str]:
-        """Find the URL for the next chapter"""
-        next_patterns = [r'next\s*chapter', r'chapter\s*\d+', r'→', r'next']
-        
-        links = soup.find_all('a', href=True)
-        
-        for link in links:
-            link_text = link.get_text().lower().strip()
-            href = link.get('href')
-            
-            for pattern in next_patterns:
-                if re.search(pattern, link_text, re.IGNORECASE):
-                    if '/wiki/Chapter_' in href:
-                        if href.startswith('/'):
-                            return urljoin(self.base_url, href)
-                        return href
-        
-        # Look for navigation boxes
-        nav_boxes = soup.find_all(['div', 'table'], class_=re.compile(r'nav|navigation', re.IGNORECASE))
-        
-        for nav_box in nav_boxes:
-            nav_links = nav_box.find_all('a', href=True)
-            for link in nav_links:
-                href = link.get('href')
-                if '/wiki/Chapter_' in href:
-                    link_text = link.get_text().strip()
-                    if any(word in link_text.lower() for word in ['next', '→', 'chapter']):
-                        if href.startswith('/'):
-                            return urljoin(self.base_url, href)
-                        return href
-        
-        # Look for sequential chapter numbers
-        current_chapter = self._extract_chapter_number("", soup)
-        if current_chapter:
-            next_chapter_num = current_chapter + 1
-            for link in links:
-                href = link.get('href')
-                if f'/wiki/Chapter_{next_chapter_num}' in href:
-                    if href.startswith('/'):
-                        return urljoin(self.base_url, href)
-                    return href
-        
-        return None
-    
-    def crawl_chapters(self, start_url: str = "https://onepiece.fandom.com/wiki/Chapter_1", 
-                      max_chapters: Optional[int] = None) -> List[Dict]:
-        """Crawl chapters starting from the given URL"""
+        Returns:
+            List of (chapter_number, url) tuples
+        """
         chapters = []
-        current_url = start_url
-        chapters_processed = 0
         
-        logger.info(f"Starting chapter crawl from: {start_url}")
+        # One Piece has 1100+ chapters as of 2024
+        # Generate URLs for chapters 1 through max_chapters (or a reasonable default)
+        default_max = max_chapters if max_chapters else 1100
         
-        while current_url and (max_chapters is None or chapters_processed < max_chapters):
-            try:
-                chapter_data = self.scrape_chapter_page(current_url)
-                
-                if chapter_data:
-                    chapters.append(chapter_data)
-                    chapters_processed += 1
-                    
-                    logger.info(f"Processed chapter {chapters_processed}: Chapter {chapter_data['number']}")
-                    
-                    current_url = chapter_data.get('next_chapter_url')
-                    
-                    if not current_url:
-                        logger.info("No next chapter URL found, ending crawl")
-                        break
-                else:
-                    logger.warning(f"Failed to scrape chapter data from {current_url}")
-                    break
-                    
-            except KeyboardInterrupt:
-                logger.info("Crawl interrupted by user")
-                break
-            except Exception as e:
-                logger.error(f"Unexpected error during crawl: {e}")
-                break
-        
-        logger.info(f"Crawl completed. Processed {len(chapters)} chapters")
+        for chapter_num in range(1, default_max + 1):
+            url = f"{self.BASE_URL}/wiki/Chapter_{chapter_num}"
+            chapters.append((chapter_num, url))
+            
         return chapters
-    
-    def test_single_chapter(self, chapter_url: str = "https://onepiece.fandom.com/wiki/Chapter_1") -> Dict:
-        """Test the crawler on a single chapter for debugging"""
-        logger.info(f"Testing single chapter: {chapter_url}")
-        return self.scrape_chapter_page(chapter_url)
-
-
-def main():
-    """Test the wiki crawler"""
-    logging.basicConfig(level=logging.INFO)
-    
-    crawler = WikiCrawler()
-    chapter_data = crawler.test_single_chapter()
-    
-    if chapter_data:
-        print(f"Chapter {chapter_data['number']}: {chapter_data['title']}")
-        print(f"Summary length: {len(chapter_data['summary'])} characters")
-        print(f"Characters found: {len(chapter_data['characters'])}")
-        print(f"Next chapter URL: {chapter_data['next_chapter_url']}")
         
-        print("\nCharacters:")
-        for char in chapter_data['characters'][:10]:
-            print(f"  - {char['name']}: {char['wiki_url']}")
-    else:
-        print("Failed to scrape chapter data")
+    def extract_character_id_from_href(self, href: str) -> str:
+        """
+        Extract character ID from wiki href.
+        
+        Example: /wiki/Monkey_D._Luffy -> Monkey_D._Luffy
+        """
+        # Remove /wiki/ prefix and any query parameters
+        path = urlparse(href).path
+        character_id = path.replace('/wiki/', '')
+        return character_id
+        
+    def fetch_chapter_data(self, chapter_url: str, chapter_num: int) -> Dict:
+        """
+        Fetch data for a single chapter.
+        
+        Returns:
+            Dict with:
+                - chapter_id: int
+                - title: str
+                - url: str
+                - raw_description: str
+                - arc_name: str (if available)
+                - characters: List[Dict] with character_id, name, href
+        """
+        time.sleep(self.delay)  # Be respectful to the server
+        
+        response = self.session.get(chapter_url)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Extract title
+        title_elem = soup.find('h1', class_='page-header__title')
+        title = title_elem.text.strip() if title_elem else f"Chapter {chapter_num}"
+        
+        # Extract arc name (usually in an infobox or breadcrumb)
+        arc_name = None
+        # Try to find arc in infobox
+        infobox = soup.find('aside', class_='portable-infobox')
+        if infobox:
+            arc_section = infobox.find('div', {'data-source': 'arc'})
+            if arc_section:
+                arc_link = arc_section.find('a')
+                if arc_link:
+                    arc_name = arc_link.text.strip()
+                    
+        # If not found, try breadcrumbs
+        if not arc_name:
+            breadcrumbs = soup.find('nav', class_='fandom-community-header__local-navigation')
+            if breadcrumbs:
+                links = breadcrumbs.find_all('a')
+                for link in links:
+                    text = link.text.strip()
+                    if 'Arc' in text or 'Saga' in text:
+                        arc_name = text
+                        break
+        
+        # Extract chapter summary/description
+        # Prioritize "Long Summary" over "Short Summary"
+        content_div = soup.find('div', class_='mw-parser-output')
+        
+        description_parts = []
+        if content_div:
+            # Look for "Long Summary" heading first
+            long_summary_found = False
+            for heading in content_div.find_all(['h2', 'h3']):
+                heading_text = heading.get_text(strip=True).lower()
+                if 'long summary' in heading_text:
+                    long_summary_found = True
+                    # Get all paragraphs after "Long Summary" until next heading
+                    next_elem = heading.find_next_sibling()
+                    while next_elem and next_elem.name not in ['h2', 'h3']:
+                        if next_elem.name == 'p':
+                            text = next_elem.get_text(strip=True)
+                            if text and len(text) > 20:
+                                description_parts.append(text)
+                        next_elem = next_elem.find_next_sibling()
+                    break
+            
+            # If no "Long Summary" found, fall back to any "Summary" section
+            if not long_summary_found:
+                for heading in content_div.find_all(['h2', 'h3']):
+                    heading_text = heading.get_text(strip=True).lower()
+                    if 'summary' in heading_text and 'short' not in heading_text:
+                        # Get paragraphs after this heading
+                        next_elem = heading.find_next_sibling()
+                        while next_elem and next_elem.name not in ['h2', 'h3']:
+                            if next_elem.name == 'p':
+                                text = next_elem.get_text(strip=True)
+                                if text and len(text) > 20:
+                                    description_parts.append(text)
+                            next_elem = next_elem.find_next_sibling()
+                        break
+            
+            # If still no summary found, get initial paragraphs
+            if not description_parts:
+                for elem in content_div.children:
+                    if elem.name == 'p':
+                        text = elem.get_text(strip=True)
+                        if text and len(text) > 20:
+                            description_parts.append(text)
+                    elif elem.name in ['h2', 'h3']:
+                        break
+                        
+        raw_description = ' '.join(description_parts)
+        
+        # Extract characters from the "Characters" section in Quick Reference
+        # This gives us a cleaner list than scraping all links
+        characters = []
+        character_hrefs_seen = set()
+        
+        # First, try to find the "Characters" heading in Quick Reference section
+        characters_section = None
+        if content_div:
+            # Look for h2/h3 with "Characters" text
+            for heading in content_div.find_all(['h2', 'h3', 'h4']):
+                if 'characters' in heading.get_text().lower():
+                    characters_section = heading
+                    break
+        
+        # If we found the characters section, extract links from there
+        if characters_section:
+            # Get the next element(s) after the heading until we hit another heading
+            current = characters_section.find_next_sibling()
+            while current and current.name not in ['h2', 'h3', 'h4']:
+                # Find all character links in this section
+                char_links = current.find_all('a', href=re.compile(r'^/wiki/[^:]+$'))
+                
+                for link in char_links:
+                    href = link.get('href')
+                    
+                    # Skip file/category/template links
+                    if any(skip in href for skip in ['File:', 'Category:', 'Template:', 'Help:', 'Special:']):
+                        continue
+                    
+                    # Check if we've already seen this character
+                    if href in character_hrefs_seen:
+                        continue
+                        
+                    character_hrefs_seen.add(href)
+                    
+                    character_id = self.extract_character_id_from_href(href)
+                    character_name = link.get_text(strip=True)
+                    
+                    if character_name and len(character_name) > 1:
+                        characters.append({
+                            'character_id': character_id,
+                            'name': character_name,
+                            'href': href
+                        })
+                
+                current = current.find_next_sibling()
+        
+        # Fallback: if no characters section found, use summary text only
+        # and apply stricter filtering
+        if not characters and content_div:
+            # Look for character links only in Short/Long Summary sections
+            summary_found = False
+            for heading in content_div.find_all(['h2', 'h3']):
+                heading_text = heading.get_text().lower()
+                if 'summary' in heading_text:
+                    summary_found = True
+                    # Get paragraphs after this heading
+                    current = heading.find_next_sibling()
+                    while current and current.name not in ['h2', 'h3']:
+                        if current.name == 'p':
+                            char_links = current.find_all('a', href=re.compile(r'^/wiki/[^:]+$'))
+                            
+                            for link in char_links:
+                                href = link.get('href')
+                                
+                                # Much stricter filtering for fallback method
+                                skip_patterns = [
+                                    'Chapter', 'Episode', 'Arc', 'Saga', 'Volume',
+                                    'Devil_Fruit', 'Marine', 'Pirate', 'Grand_Line',
+                                    'East_Blue', 'New_World', 'Haki', 'Gomu_Gomu',
+                                    'Jolly_Roger', 'File:', 'Category:', 'Template:',
+                                    'Help:', 'Special:', 'Village', 'Bar', 'Island',
+                                    'Sea_King', 'Cover_Page', 'Color_Spread'
+                                ]
+                                
+                                if any(pattern in href for pattern in skip_patterns):
+                                    continue
+                                
+                                # Skip if already seen
+                                if href in character_hrefs_seen:
+                                    continue
+                                    
+                                character_hrefs_seen.add(href)
+                                
+                                character_id = self.extract_character_id_from_href(href)
+                                character_name = link.get_text(strip=True)
+                                
+                                # Additional filter: skip very short names (likely not characters)
+                                if character_name and len(character_name) > 2:
+                                    characters.append({
+                                        'character_id': character_id,
+                                        'name': character_name,
+                                        'href': href
+                                    })
+                        
+                        current = current.find_next_sibling()
+                    
+                    if summary_found:
+                        break
+        
+        return {
+            'chapter_id': chapter_num,
+            'title': title,
+            'url': chapter_url,
+            'raw_description': raw_description,
+            'arc_name': arc_name,
+            'characters': characters
+        }
+        
+    def crawl_chapters(self, start_chapter: int = 1, 
+                      end_chapter: Optional[int] = None,
+                      max_chapters: Optional[int] = None) -> List[Dict]:
+        """
+        Crawl multiple chapters.
+        
+        Args:
+            start_chapter: First chapter to crawl
+            end_chapter: Last chapter to crawl (inclusive)
+            max_chapters: Maximum number of chapters to crawl
+            
+        Returns:
+            List of chapter data dicts
+        """
+        print("Generating chapter URLs...")
+        
+        # Determine the range of chapters to process
+        if max_chapters:
+            # If max_chapters is specified, go from start_chapter to start_chapter + max_chapters - 1
+            end = start_chapter + max_chapters - 1
+            if end_chapter and end_chapter < end:
+                end = end_chapter
+            chapter_urls = self.fetch_chapter_urls(max_chapters=end)
+        else:
+            # Generate URLs for the specified range
+            chapter_urls = self.fetch_chapter_urls(max_chapters=end_chapter if end_chapter else 1100)
+        
+        # Filter by range
+        chapter_urls = [
+            (num, url) for num, url in chapter_urls
+            if num >= start_chapter and (not end_chapter or num <= end_chapter)
+        ]
+        
+        # Apply max_chapters limit after filtering by range
+        if max_chapters:
+            chapter_urls = chapter_urls[:max_chapters]
+        
+        print(f"Will process {len(chapter_urls)} chapters (Chapter {chapter_urls[0][0]} to Chapter {chapter_urls[-1][0]})")
+        
+        chapters_data = []
+        for i, (chapter_num, url) in enumerate(chapter_urls, 1):
+            try:
+                print(f"Crawling chapter {chapter_num} ({i}/{len(chapter_urls)})...")
+                data = self.fetch_chapter_data(url, chapter_num)
+                chapters_data.append(data)
+            except Exception as e:
+                print(f"Error crawling chapter {chapter_num}: {e}")
+                continue
+                
+        return chapters_data
+        
+    def test_single_chapter(self, chapter_num: int) -> Dict:
+        """Test crawling a single chapter."""
+        url = f"{self.BASE_URL}/wiki/Chapter_{chapter_num}"
+        return self.fetch_chapter_data(url, chapter_num)
 
 
 if __name__ == "__main__":
-    main()
+    # Test the crawler
+    crawler = WikiCrawler(delay=1.0)
+    
+    # Test with a single chapter
+    print("Testing with Chapter 1...")
+    data = crawler.test_single_chapter(1)
+    
+    print(f"\nChapter: {data['title']}")
+    print(f"Arc: {data['arc_name']}")
+    print(f"Description length: {len(data['raw_description'])} chars")
+    print(f"Characters found: {len(data['characters'])}")
+    print("\nFirst 5 characters:")
+    for char in data['characters'][:5]:
+        print(f"  - {char['name']} ({char['character_id']})")
+

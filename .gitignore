@@ -1,37 +1,15 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Virtual Environment
+# Environment
+.env
 venv/
 env/
 ENV/
+*.pyc
+__pycache__/
 
-# Environment Variables
-.env
-.env.local
-.env.development
-.env.test
-.env.production.local
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
 # IDE
 .vscode/
@@ -42,34 +20,14 @@ ENV/
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
 # Logs
 *.log
-logs/
-real_llm_logs/
+llm_logs/
 
-# Database (keep the main one, ignore backups)
-*.db-journal
-*.db-wal
-*.db-shm
-backup_*.db
+# Distribution
+dist/
+build/
+*.egg-info/
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Deployment
-.dockerignore
-
-# Task summaries (optional - you might want to keep these)
-TASK_*_IMPLEMENTATION_SUMMARY.md
-TESTING_IMPLEMENTATION_SUMMARY.md
-
-.kiro/

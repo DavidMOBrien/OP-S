@@ -1,739 +1,582 @@
-#!/usr/bin/env python3
-"""
-LLM Analyzer for One Piece Character Tracker
-Integrates with OpenAI API to analyze character value changes with market context
-"""
+"""LLM analyzer for character stock changes - PER CHARACTER APPROACH."""
 
-import os
 import json
-import time
-import logging
-from typing import Dict, List, Optional, Tuple
-from dataclasses import dataclass
-import openai
+from typing import List, Dict, Optional
 from openai import OpenAI
-import re
-from datetime import datetime
+import os
+from dotenv import load_dotenv
 from pathlib import Path
+from datetime import datetime
 
-logger = logging.getLogger(__name__)
+# Load environment variables from .env file
+load_dotenv()
 
-@dataclass
-class CharacterAnalysis:
-    """Result of LLM character analysis"""
-    character_changes: List[Dict]
-    new_characters: List[Dict]
-    analysis_reasoning: str
-
-@dataclass
-class LLMConfig:
-    """Configuration for LLM analysis"""
-    model: str = "gpt-4"
-    temperature: float = 0.3
-    max_tokens: int = 2000
-    max_retries: int = 3
-    base_retry_delay: float = 1.0
-    max_retry_delay: float = 60.0
 
 class LLMAnalyzer:
-    """Analyzes One Piece chapters using LLM with market context"""
+    """Analyzes chapters using LLM to extract stock changes."""
     
-    def __init__(self, api_key: Optional[str] = None, config: Optional[LLMConfig] = None, log_dir: str = "llm_logs"):
-        """Initialize the LLM analyzer"""
+    def __init__(self, api_key: Optional[str] = None, model: str = "gpt-4o-mini", log_dir: str = "llm_logs"):
+        """
+        Initialize the analyzer.
+        
+        Args:
+            api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
+            model: Model to use (gpt-4o-mini, gpt-4o, etc.)
+            log_dir: Directory to save LLM interaction logs
+        """
         self.api_key = api_key or os.getenv('OPENAI_API_KEY')
         if not self.api_key:
-            raise ValueError("OpenAI API key is required. Set OPENAI_API_KEY environment variable.")
-        
+            raise ValueError("OpenAI API key must be provided or set in OPENAI_API_KEY env var")
+            
         self.client = OpenAI(api_key=self.api_key)
-        self.config = config or LLMConfig()
+        self.model = model
         
-        # Setup logging directory
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(exist_ok=True)
-        
-        # Create subdirectories for different types of logs
-        (self.log_dir / "prompts").mkdir(exist_ok=True)
-        (self.log_dir / "responses").mkdir(exist_ok=True)
-        (self.log_dir / "errors").mkdir(exist_ok=True)
-        
-        logger.info(f"Initialized LLM analyzer with model: {self.config.model}")
-        logger.info(f"LLM logs will be saved to: {self.log_dir.absolute()}")
+        # Create timestamped subfolder for this run
+        run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_dir = Path(log_dir) / run_timestamp
+        self.log_dir.mkdir(parents=True, exist_ok=True)
     
-    def analyze_chapter(self, chapter_data: Dict, chapter_character_values: List[Dict], 
-                       market_context: Dict) -> Optional[CharacterAnalysis]:
-        """Analyze a chapter with full market context"""
-        chapter_num = chapter_data['number']
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    def _save_character_log(self, character_name: str, chapter_id: int, char_type: str,
+                           system_prompt: str, user_prompt: str, response: str, success: bool):
+        """
+        Save LLM interaction log for a character.
+        
+        Args:
+            character_name: Name of the character
+            chapter_id: Chapter number
+            char_type: 'NEW' or 'EXISTING'
+            system_prompt: System prompt sent
+            user_prompt: User prompt sent
+            response: LLM response
+            success: Whether the call succeeded
+        """
+        # Sanitize character name for filesystem
+        safe_char_name = "".join(c if c.isalnum() or c in (' ', '_', '-') else '_' for c in character_name)
+        safe_char_name = safe_char_name.replace(' ', '_')
+        
+        # Create character subfolder
+        char_dir = self.log_dir / safe_char_name
+        char_dir.mkdir(exist_ok=True)
+        
+        # Create log file
+        status = "SUCCESS" if success else "FAILED"
+        filename = f"chapter_{chapter_id:03d}_{char_type}_{status}.txt"
+        filepath = char_dir / filename
+        
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("="*80 + "\n")
+            f.write(f"CHARACTER: {character_name}\n")
+            f.write(f"CHAPTER: {chapter_id}\n")
+            f.write(f"TYPE: {char_type}\n")
+            f.write(f"STATUS: {status}\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+            f.write(f"Model: {self.model}\n")
+            f.write("="*80 + "\n\n")
+            
+            f.write("SYSTEM PROMPT:\n")
+            f.write("-"*80 + "\n")
+            f.write(system_prompt)
+            f.write("\n\n")
+            
+            f.write("USER PROMPT:\n")
+            f.write("-"*80 + "\n")
+            f.write(user_prompt)
+            f.write("\n\n")
+            
+            f.write("LLM RESPONSE:\n")
+            f.write("-"*80 + "\n")
+            f.write(response)
+            f.write("\n\n")
+            
+            f.write("="*80 + "\n")
+        
+    def filter_characters(self, characters: List[Dict], chapter_data: Dict, verbose: bool = False) -> List[Dict]:
+        """
+        Use LLM to filter out generic groups, locations, etc.
+        
+        Args:
+            characters: List of character dicts with name and href
+            chapter_data: Chapter information
+            verbose: Print debug info
+            
+        Returns:
+            List of valid named individual characters
+        """
+        system_prompt = """You filter One Piece character lists to remove NOISE.
+
+REMOVE:
+- Generic groups: "Pirates", "Marines", "Straw Hat Pirates", "Buggy's Crew"
+- Locations: "Orange Town", "Shells Town", "East Blue"
+- Military ranks: "Captain", "Lieutenant", "Seaman Recruit"
+- Generic terms: "Villagers", "Townsfolk", "Citizens"
+
+KEEP:
+- Named individuals: "Monkey D. Luffy", "Roronoa Zoro", "Buggy", "Nami"
+- Even minor named characters: "Rika", "Helmeppo", "Koby"
+
+Return JSON: {"keep": ["name1", "name2", ...]}
+"""
+
+        # Build character list
+        char_list = "\n".join([f"- {c['name']} ({c['href']})" for c in characters])
+        
+        user_prompt = f"""Chapter {chapter_data['chapter_id']}: {chapter_data['title']}
+
+Characters extracted from wiki:
+{char_list}
+
+Which are NAMED INDIVIDUALS (not groups/locations/ranks)?
+Return JSON: {{"keep": ["exact name from list", ...]}}"""
+
+        if verbose:
+            print(f"\n🔍 FILTERING {len(characters)} characters...")
         
         try:
-            # Check if custom prompt is provided
-            if 'custom_prompt' in chapter_data:
-                prompt = chapter_data['custom_prompt']
-                logger.info(f"Using custom prompt for Chapter {chapter_num}")
-            else:
-                # Build standard prompt
-                prompt = self._build_comprehensive_prompt(
-                    chapter_data, chapter_character_values, market_context
-                )
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.3
+            )
             
-            # Log the prompt
-            self._log_prompt(chapter_num, prompt, timestamp)
+            content = response.choices[0].message.content
+            result = json.loads(content)
+            keep_names = set(result.get('keep', []))
             
-            logger.info(f"Analyzing Chapter {chapter_num} with {len(chapter_character_values)} characters")
+            # Filter characters
+            filtered = [c for c in characters if c['name'] in keep_names]
             
-            # Call LLM with retry logic
-            response = self._call_llm_with_retry(prompt, chapter_num, timestamp)
-            if not response:
-                error_msg = f"Failed to get LLM response for Chapter {chapter_num}"
-                logger.error(error_msg)
-                self._log_error(chapter_num, error_msg, timestamp)
-                return None
+            if verbose:
+                removed = [c['name'] for c in characters if c['name'] not in keep_names]
+                print(f"✅ Kept {len(filtered)} valid characters")
+                if removed:
+                    print(f"🗑️  Removed: {', '.join(removed)}")
             
-            # Log the response
-            self._log_response(chapter_num, response, timestamp)
-            
-            # Parse and validate response
-            analysis = self._parse_llm_response(response, chapter_character_values)
-            if not analysis:
-                error_msg = f"Failed to parse LLM response for Chapter {chapter_num}"
-                logger.error(error_msg)
-                self._log_error(chapter_num, error_msg, timestamp)
-                return None
-            
-            # Log successful analysis
-            self._log_analysis_result(chapter_num, analysis, timestamp)
-            
-            logger.info(f"Successfully analyzed Chapter {chapter_num}: "
-                       f"{len(analysis.character_changes)} changes, {len(analysis.new_characters)} new characters")
-            
-            return analysis
+            return filtered
             
         except Exception as e:
-            error_msg = f"Error analyzing Chapter {chapter_num}: {e}"
-            logger.error(error_msg)
-            self._log_error(chapter_num, error_msg, timestamp, str(e))
-            return None
+            print(f"⚠️  Filter failed ({e}), keeping all characters")
+            return characters
     
-    def _build_comprehensive_prompt(self, chapter_data: Dict, chapter_character_values: List[Dict], 
-                                  market_context: Dict) -> str:
-        """Build comprehensive prompt with market context and character information"""
+    def analyze_new_character(self, character: Dict, chapter_data: Dict, 
+                            market_context: Dict, verbose: bool = False, max_retries: int = 3) -> Dict:
+        """
+        Get initial stock value for a NEW character.
         
-        # Build character context section
-        character_context = self._build_character_context(chapter_character_values)
-        
-        # Build market context section
-        market_context_text = self._build_market_context(market_context)
-        
-        # Main prompt template
-        prompt = f"""You are analyzing One Piece manga chapters to determine character value changes in a stock market-like system. Your analysis should consider fights, powerups, character development, aura moments, and narrative importance.
+        Args:
+            character: Character dict with name and href
+            chapter_data: Chapter information
+            market_context: Market state (for scaling)
+            verbose: Print debug info
+            max_retries: Number of retry attempts
+            
+        Returns:
+            Dict with character_name, character_href, stock_change (integer), confidence, reasoning
+        """
+        system_prompt = """You assign INITIAL STOCK VALUES to new One Piece characters based on COMPREHENSIVE EVALUATION.
 
-CHAPTER INFORMATION:
-Chapter {chapter_data['number']}: {chapter_data.get('title', 'Unknown Title')}
+🎯 **EVALUATION CRITERIA** (ALL weighted EQUALLY - not just fights!):
+1. **Character Moments & Growth** - Emotional depth, character development, compelling dialogue, moral choices, relationships
+2. **Fight Performance** - Wins, losses, power displays, techniques (but fighting is just ONE aspect!)
+3. **Writing Quality** - How well written/portrayed, dialogue quality, scene presence
+4. **Aura/Presence** - Commanding energy, intimidation, charisma, "main character energy", how they're talked about by others
+5. **Visual Design & Aesthetics** - Cool designs, attractive appearance, iconic looks (yes, Nami bikini counts!)
+6. **Narrative Weight** - Plot importance, thematic relevance, setup for future arcs
+7. **Threat/Hype** - Being built up as dangerous, mentioned with fear/respect, anticipated arrival
+8. **Comparative Context** - How they compare to OTHER characters' past debuts (see "PAST CHANGES" below)
+
+⚖️ **CRITICAL MINDSET:**
+- **Character moments = Combat moments** - A powerful emotional scene is as valuable as winning a fight
+- **Heroes are NOT immune** - Punish cowardice, poor choices, character regression
+- **Villains can DOMINATE** - Reward threatening presence, effective schemes, being feared
+- **Role fulfillment matters** - Villain being scary = GOOD, hero being inspiring = GOOD
+- **Being hyped/anticipated is POSITIVE** - If other characters fear/mention a villain, that's a strength!
+
+📊 **SCALING (use "PAST CHANGES" as reference for consistency):**
+- **Arc villains**: Should rival current top heroes (look at protagonist's stock AND market average)
+  - Early series (market avg 30-50): Arc villain = 40-70
+  - Mid series (market avg 100-200): Arc villain = 100-200+
+  - The market grows, so should new threats!
+- **Henchmen**: 30-60% of their boss's value
+- **Allies/Supporting cast**: Based on narrative importance, scale to current market level
+- **Cameos/Minor**: 10-30, but can be higher if market average is very high
+
+⚠️ **IMPORTANT**: New characters should be scaled to the CURRENT market level!
+A villain introduced at Chapter 50 should be much stronger than one at Chapter 1 if the stakes have grown!
+
+Return JSON: {"stock_value": <integer 10-200>, "confidence": 0-1, "reasoning": "..."}"""
+
+        # Get context
+        protag_stock = 100  # default
+        if market_context.get('top_ten'):
+            protag_stock = market_context['top_ten'][0]['stock_value']
+        
+        stats = market_context.get('statistics', {})
+        market_avg = stats.get('average', 50)
+        
+        # Build top stocks list
+        top_stocks_text = ""
+        if market_context.get('top_ten'):
+            top_stocks_text = "\nTOP 10 STOCKS (from previous chapters):\n"
+            for i, char in enumerate(market_context['top_ten'][:10], 1):
+                top_stocks_text += f"  {i}. {char['character_name']}: {char['stock_value']:.0f}\n"
+        
+        # Build chapter character history
+        chapter_history_text = ""
+        if market_context.get('chapter_character_history'):
+            chapter_history_text = "\nPAST CHANGES FOR CHARACTERS IN THIS CHAPTER (last 3 changes per character):\n"
+            for hist in market_context['chapter_character_history'][:15]:  # Limit to 15 entries
+                if hist.get('multiplier') is None:
+                    # New character
+                    chapter_history_text += f"  • {hist['character_name']} (Ch.{hist['chapter_id']}): NEW at {hist.get('initial_value', 0):.0f} → {hist.get('reasoning', '')}\n"
+                else:
+                    # Existing character with multiplier
+                    chapter_history_text += f"  • {hist['character_name']} (Ch.{hist['chapter_id']}): {hist['multiplier']:.2f}x → {hist.get('reasoning', '')}\n"
+        
+        user_prompt = f"""NEW CHARACTER: {character['name']}
+Chapter {chapter_data['chapter_id']}: {chapter_data['title']}
+
+MARKET CONTEXT (from previous chapters):
+- Protagonist stock: {protag_stock:.0f}
+- Market average: {market_avg:.0f}
+- Total characters: {stats.get('total_characters', 0)}
+{top_stocks_text}
+{chapter_history_text}
 
 CHAPTER SUMMARY:
-{chapter_data['summary']}
+{chapter_data['raw_description']}
 
-{character_context}
+What initial stock value for {character['name']}?
+⚠️ SCALE TO CURRENT MARKET: If market avg is 200, arc villains should be 150-250, not 50!
+Return JSON: {{"stock_value": <integer>, "confidence": 0-1, "reasoning": "..."}}"""
 
-{market_context_text}
-
-ANALYSIS GUIDELINES:
-
-1. VALUE SCALING: Late-game characters should have significantly higher values than early-game characters
-   - Early main characters (Luffy, Zoro, Sanji): 50-200 range initially
-   - Mid-tier characters (Captains, Vice Admirals): 300-600 range
-   - Top-tier characters (Yonko, Admirals): 700-1000+ range
-   - Legendary figures (Roger, Whitebeard): 900-1000+ range
-
-2. MAJOR VALUE INCREASES (+15 to +50):
-   FIGHTS & VICTORIES:
-   - Defeating a major antagonist or boss-level opponent
-   - Winning against someone with higher bounty/status
-   - Overcoming seemingly impossible odds in battle
-   - First time defeating a specific type of opponent (Logia, etc.)
-   - Protecting crew/friends through combat prowess
-   
-   POWERUPS & ABILITIES:
-   - Awakening new Devil Fruit abilities or advanced techniques
-   - Learning advanced Haki (Conqueror's, Future Sight, etc.)
-   - Mastering new fighting styles or weapons
-   - Unlocking transformation forms (Gear 2/3/4, Monster Point, etc.)
-   - Combining abilities in innovative ways
-   
-   AURA & HYPE MOMENTS:
-   - Displaying Conqueror's Haki that affects multiple people
-   - Making dramatic entrances that shift battle momentum
-   - Intimidating powerful opponents through presence alone
-   - Moments that make other characters acknowledge their strength
-   - Epic one-liners or declarations that become iconic
-   
-   CHARACTER DEVELOPMENT:
-   - Major backstory reveals that recontextualize their importance
-   - Moments of incredible willpower or determination
-   - Sacrificing for others or showing true leadership
-   - Overcoming personal trauma or character flaws
-   - Making difficult moral choices that define them
-
-3. MODERATE VALUE INCREASES (+5 to +15):
-   COMBAT PERFORMANCE:
-   - Winning fights against equal or slightly weaker opponents
-   - Showing new techniques or improved skills
-   - Holding their own against stronger opponents
-   - Clever tactical victories using intelligence over raw power
-   - Teamwork moments that showcase their abilities
-   
-   NARRATIVE IMPORTANCE:
-   - Advancing the plot through their actions
-   - Revealing important information or connections
-   - Taking on leadership roles or responsibilities
-   - Moments of competence that help the crew/allies
-   - Cool design moments or outfit changes that enhance their image
-   
-   HYPE BUILDING:
-   - Teasing future power or importance
-   - Other characters commenting on their potential
-   - Surviving dangerous situations through skill
-   - Small displays of advanced abilities
-
-4. MAJOR VALUE DECREASES (-15 to -50):
-   DEFEATS & FAILURES:
-   - Losing to opponents they were expected to beat
-   - Being completely overwhelmed or humiliated in battle
-   - Failing to protect someone important to them
-   - Major strategic blunders that cost their side
-   - Being revealed as weaker than previously thought
-   
-   FRAUD MOMENTS:
-   - Abilities being revealed as less impressive than hyped
-   - Relying too heavily on others instead of own strength
-   - Backing down from fights they should take
-   - Being exposed as having inflated reputation
-   - Losing credibility through poor decision-making
-   
-   CHARACTER REGRESSION:
-   - Acting against their established principles
-   - Showing cowardice in crucial moments
-   - Betraying allies or friends
-   - Making decisions that harm their crew/cause
-   - Displaying incompetence in their area of expertise
-
-5. MODERATE VALUE DECREASES (-5 to -15):
-   MINOR SETBACKS:
-   - Losing fights against stronger opponents (expected losses)
-   - Making tactical mistakes that don't have major consequences
-   - Moments of weakness or vulnerability
-   - Being outshined by other characters in their specialty
-   - Small displays of incompetence or poor judgment
-   
-   DISAPPOINTING MOMENTS:
-   - Not living up to built-up expectations
-   - Missing opportunities to shine or contribute
-   - Being sidelined when they should be important
-   - Showing less growth than expected
-   - Design changes that make them less cool/intimidating
-
-6. SPECIAL CONSIDERATIONS:
-   DESIGN & AESTHETICS:
-   - New outfits, weapons, or visual upgrades can add +3 to +8
-   - Outfits with poor design can have negative effects
-   - Intimidating new forms or appearances boost value
-   - Poor design choices or downgrades can reduce value
-   
-   BOUNTY REVEALS:
-   - Higher than expected bounties: +10 to +25
-   - Lower than expected bounties: -5 to -15
-   - First bounty reveals for new characters set baseline expectations
-   
-   CREW DYNAMICS:
-   - Joining a powerful crew: +5 to +15
-   - Being kicked out or leaving a crew: -10 to -25
-   - Becoming a captain or leader: +10 to +20
-   
-   WORLD BUILDING IMPACT:
-   - Being connected to major historical events: +5 to +20
-   - Having important bloodlines or heritage revealed: +10 to +30
-   - Being involved in world-changing events: +15 to +40
-
-7. NEW CHARACTER STARTING VALUES:
-   - Consider their introduction context and immediate impact
-   - Scale appropriately to current story progression and power levels
-   - Late-game introductions should have higher starting values
-   - Factor in their design, abilities, and narrative role
-
-8. MARKET AWARENESS:
-   - Consider recent market trends and character trajectories
-   - Ensure value changes make sense in current market context
-   - Avoid extreme swings unless justified by major story events
-   - Balance hype with actual demonstrated abilities
-
-RESPONSE FORMAT:
-Respond with valid JSON only. No additional text or explanations outside the JSON.
-
-{{
-  "character_changes": [
-    {{
-      "wiki_url": "/wiki/Character_Name",
-      "name": "Character Name",
-      "value_change": 25,
-      "reasoning": "Detailed explanation of why this change occurred based on chapter events"
-    }}
-  ],
-  "new_characters": [
-    {{
-      "wiki_url": "/wiki/New_Character",
-      "name": "New Character Name", 
-      "starting_value": 150,
-      "reasoning": "Explanation of starting value based on power level and narrative importance"
-    }}
-  ],
-  "analysis_summary": "Brief summary of key market movements and reasoning"
-}}
-
-Only include characters that had significant moments or were newly introduced in this chapter. Do not include characters with no meaningful changes."""
-
-        return prompt
-    
-    def _build_character_context(self, chapter_character_values: List[Dict]) -> str:
-        """Build character context section for the prompt"""
-        if not chapter_character_values:
-            return "CHARACTERS IN CHAPTER: None identified"
-        
-        context_lines = ["CHARACTERS IN THIS CHAPTER:"]
-        
-        for char in chapter_character_values:
-            name = char['name']
-            wiki_url = char['wiki_url']
-            current_value = char.get('current_value')
-            exists_in_db = char.get('exists_in_db', False)
-            recent_activity = char.get('recent_activity', [])
-            
-            if exists_in_db and current_value is not None:
-                context_lines.append(f"\n{name} (Current Value: {current_value})")
-                context_lines.append(f"  Wiki URL: {wiki_url}")
-                
-                if recent_activity:
-                    context_lines.append("  Recent Activity:")
-                    for activity in recent_activity[:3]:  # Show last 3 activities
-                        context_lines.append(f"    Chapter {activity['chapter']}: {activity['value_change']:+d} "
-                                           f"({activity['reasoning']}) -> {activity['new_value']}")
-                else:
-                    context_lines.append("  Recent Activity: None")
-            else:
-                context_lines.append(f"\n{name} (NEW CHARACTER - Not in database)")
-                context_lines.append(f"  Wiki URL: {wiki_url}")
-                context_lines.append("  This character needs a starting value based on their introduction")
-        
-        return "\n".join(context_lines)
-    
-    def _build_market_context(self, market_context: Dict) -> str:
-        """Build market context section for the prompt"""
-        context_lines = ["CURRENT MARKET CONTEXT:"]
-        
-        # Total characters
-        total_chars = market_context.get('total_characters', 0)
-        context_lines.append(f"Total Characters in Database: {total_chars}")
-        
-        # Top characters
-        top_chars = market_context.get('top_characters', [])
-        if top_chars:
-            context_lines.append("\nTop 5 Highest Valued Characters:")
-            for char in top_chars[:5]:
-                context_lines.append(f"  {char['name']}: {char['value']} points")
-        
-        # Bottom characters
-        bottom_chars = market_context.get('bottom_characters', [])
-        if bottom_chars:
-            context_lines.append("\nLowest 5 Valued Characters:")
-            for char in bottom_chars[:5]:
-                context_lines.append(f"  {char['name']}: {char['value']} points")
-        
-        # Recent changes
-        recent_changes = market_context.get('recent_changes', [])
-        if recent_changes:
-            context_lines.append("\nRecent Market Activity (Last 5 Chapters):")
-            for change in recent_changes[:10]:  # Show top 10 recent changes
-                context_lines.append(f"  Chapter {change['chapter']}: {change['character']} "
-                                   f"{change['change']:+d} ({change['reason']}) -> {change['new_value']}")
-        
-        return "\n".join(context_lines)
-    
-    def _log_prompt(self, chapter_num: int, prompt: str, timestamp: str):
-        """Log the prompt sent to LLM"""
-        try:
-            prompt_file = self.log_dir / "prompts" / f"chapter_{chapter_num:04d}_{timestamp}.txt"
-            with open(prompt_file, 'w', encoding='utf-8') as f:
-                f.write(f"Chapter: {chapter_num}\n")
-                f.write(f"Timestamp: {timestamp}\n")
-                f.write(f"Prompt Length: {len(prompt)} characters\n")
-                f.write("=" * 80 + "\n")
-                f.write(prompt)
-            logger.debug(f"Logged prompt for Chapter {chapter_num} to {prompt_file}")
-        except Exception as e:
-            logger.warning(f"Failed to log prompt for Chapter {chapter_num}: {e}")
-    
-    def _log_response(self, chapter_num: int, response: str, timestamp: str):
-        """Log the response from LLM"""
-        try:
-            # Save pure JSON response
-            response_file = self.log_dir / "responses" / f"chapter_{chapter_num:04d}_{timestamp}.json"
-            with open(response_file, 'w', encoding='utf-8') as f:
-                f.write(response)
-            
-            # Save metadata separately
-            metadata_file = self.log_dir / "responses" / f"chapter_{chapter_num:04d}_{timestamp}_metadata.txt"
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                f.write(f"Chapter: {chapter_num}\n")
-                f.write(f"Timestamp: {timestamp}\n")
-                f.write(f"Response Length: {len(response)} characters\n")
-                f.write("=" * 80 + "\n")
-            
-            logger.debug(f"Logged response for Chapter {chapter_num} to {response_file}")
-        except Exception as e:
-            logger.warning(f"Failed to log response for Chapter {chapter_num}: {e}")
-    
-    def _log_error(self, chapter_num: int, error_msg: str, timestamp: str, exception_details: str = ""):
-        """Log errors during processing"""
-        try:
-            error_file = self.log_dir / "errors" / f"chapter_{chapter_num:04d}_{timestamp}.txt"
-            with open(error_file, 'w', encoding='utf-8') as f:
-                f.write(f"Chapter: {chapter_num}\n")
-                f.write(f"Timestamp: {timestamp}\n")
-                f.write(f"Error: {error_msg}\n")
-                if exception_details:
-                    f.write(f"Exception Details: {exception_details}\n")
-                f.write("=" * 80 + "\n")
-            logger.debug(f"Logged error for Chapter {chapter_num} to {error_file}")
-        except Exception as e:
-            logger.warning(f"Failed to log error for Chapter {chapter_num}: {e}")
-    
-    def _log_analysis_result(self, chapter_num: int, analysis: CharacterAnalysis, timestamp: str):
-        """Log the final analysis result"""
-        try:
-            result_file = self.log_dir / "responses" / f"chapter_{chapter_num:04d}_{timestamp}_analysis.json"
-            result_data = {
-                "chapter": chapter_num,
-                "timestamp": timestamp,
-                "character_changes": analysis.character_changes,
-                "new_characters": analysis.new_characters,
-                "analysis_summary": analysis.analysis_reasoning
-            }
-            with open(result_file, 'w', encoding='utf-8') as f:
-                json.dump(result_data, f, indent=2, ensure_ascii=False)
-            logger.debug(f"Logged analysis result for Chapter {chapter_num} to {result_file}")
-        except Exception as e:
-            logger.warning(f"Failed to log analysis result for Chapter {chapter_num}: {e}")
-
-    def _call_llm_with_retry(self, prompt: str, chapter_num: int = 0, timestamp: str = "") -> Optional[str]:
-        """Call LLM API with exponential backoff retry logic"""
-        retry_delay = self.config.base_retry_delay
-        
-        for attempt in range(self.config.max_retries):
+        for attempt in range(1, max_retries + 1):
             try:
-                logger.debug(f"LLM API call attempt {attempt + 1}/{self.config.max_retries}")
-                
                 response = self.client.chat.completions.create(
-                    model=self.config.model,
+                    model=self.model,
                     messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert One Piece analyst who understands character power scaling, narrative importance, and market dynamics. Respond only with valid JSON."
-                        },
-                        {
-                            "role": "user", 
-                            "content": prompt
-                        }
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
                     ],
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens
+                    response_format={"type": "json_object"},
+                    temperature=0.7
                 )
                 
                 content = response.choices[0].message.content
-                if content:
-                    logger.debug("Successfully received LLM response")
-                    return content.strip()
-                else:
-                    logger.warning("Empty response from LLM")
-                    
-            except openai.RateLimitError as e:
-                logger.warning(f"Rate limit error (attempt {attempt + 1}): {e}")
-                if attempt < self.config.max_retries - 1:
-                    logger.info(f"Waiting {retry_delay} seconds before retry...")
-                    time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 2, self.config.max_retry_delay)
-                    continue
-                else:
-                    logger.error("Max retries reached for rate limit error")
-                    return None
-                    
-            except openai.APIError as e:
-                logger.warning(f"API error (attempt {attempt + 1}): {e}")
-                if attempt < self.config.max_retries - 1:
-                    logger.info(f"Waiting {retry_delay} seconds before retry...")
-                    time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 2, self.config.max_retry_delay)
-                    continue
-                else:
-                    logger.error("Max retries reached for API error")
-                    return None
-                    
+                result = json.loads(content)
+                
+                stock_value = int(result['stock_value'])
+                confidence = float(result['confidence'])
+                reasoning = result['reasoning']
+                
+                # Validate and clamp to minimum of 1
+                if stock_value < 1:
+                    stock_value = 1  # Default to minimum stock
+                if stock_value > 10000:
+                    raise ValueError(f"Stock value out of range: {stock_value}")
+                
+                if confidence < 0 or confidence > 1:
+                    confidence = max(0, min(1, confidence))
+                
+                # Save log
+                self._save_character_log(character['name'], chapter_data['chapter_id'], 
+                                        'NEW', system_prompt, user_prompt, content, True)
+                
+                return {
+                    'character_name': character['name'],
+                    'character_href': character['href'],
+                    'stock_change': stock_value,
+                    'confidence': confidence,
+                    'reasoning': reasoning
+                }
+                
             except Exception as e:
-                logger.error(f"Unexpected error calling LLM (attempt {attempt + 1}): {e}")
-                if attempt < self.config.max_retries - 1:
-                    time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 2, self.config.max_retry_delay)
-                    continue
+                # Save failed log
+                self._save_character_log(character['name'], chapter_data['chapter_id'],
+                                        'NEW', system_prompt, user_prompt, 
+                                        f"Error: {e}", False)
+                
+                if attempt >= max_retries:
+                    print(f"❌ Failed to analyze NEW {character['name']}: {e}")
+                    # Return default
+                    return {
+                        'character_name': character['name'],
+                        'character_href': character['href'],
+                        'stock_change': int(market_avg),
+                        'confidence': 0.3,
+                        'reasoning': f"Failed analysis, using market average ({e})"
+                    }
+        
+    def analyze_existing_character(self, character: Dict, chapter_data: Dict, 
+                                  market_context: Dict, verbose: bool = False, max_retries: int = 3) -> Dict:
+        """
+        Get stock multiplier for an EXISTING character.
+        
+        Args:
+            character: Character dict with name, href, current_stock, recent_history
+            chapter_data: Chapter information
+            market_context: Market state
+            verbose: Print debug info
+            max_retries: Number of retry attempts
+            
+        Returns:
+            Dict with character_name, character_href, stock_change (decimal multiplier), confidence, reasoning
+        """
+        system_prompt = """You assign STOCK MULTIPLIERS to existing One Piece characters based on COMPREHENSIVE EVALUATION.
+
+🎯 **EVALUATION CRITERIA** (ALL weighted EQUALLY - not just fights!):
+1. **Character Moments & Growth** - Emotional depth, development arcs, compelling dialogue, moral choices, relationships formed/broken
+2. **Fight Performance** - Wins, losses, battle progress, power displays (but fighting is just ONE aspect!)
+3. **Writing Quality** - How well written/portrayed, dialogue quality, scene presence this chapter
+4. **Aura/Presence** - Commanding energy, intimidation factor, charisma, being talked about/feared by others
+5. **Visual Moments** - Cool scenes, intimidating shots, attractive appearances, iconic moments
+6. **Narrative Weight** - Plot importance, thematic relevance, setup for future events
+7. **Role Fulfillment** - How well they execute their narrative role (hero being inspiring, villain being threatening)
+8. **Comparative Context** - How their actions compare to OTHER characters in similar situations (see "PAST CHANGES")
+
+⚖️ **CRITICAL MINDSET:**
+- **Character moments = Combat moments** - Emotional scene with great writing is AS valuable as winning a fight
+- **Heroes are NOT immune** - Punish cowardice, regression, poor choices, fumbling
+- **Villains can DOMINATE** - Reward threatening presence, successful schemes, being feared/hyped
+- **Absence vs. Defeat are DIFFERENT**:
+  - **Not appearing but being mentioned/hyped** = INACTIVE (1.0) or small positive if building threat
+  - **Actually losing/being defeated** = NEGATIVE multiplier
+  - **Don't punish characters for not being in the chapter!**
+- **Net outcome matters** - Focus on chapter's END result, not micro-moments
+- **Heroic sacrifice = GAIN**, **Wise restraint = STRENGTH**, **Strategic deception = INTELLIGENCE**
+
+🎚️ **EXPECTATION SCALING** (CRITICAL - prevents runaway growth!):
+Higher stock = Higher expectations = Harder to gain, easier to lose
+
+**Compare character's current stock to market average:**
+- **Far above average (2x+ market avg)**: Meeting expectations = 1.00-1.05x, only EXCEPTIONAL moments warrant 1.10x+
+  - Example: Top character beats a henchman = 1.02x (expected), loses to villain = 0.60x (harsh)
+- **Above average (1.5-2x market avg)**: Good performance = 1.05-1.10x, needs strong showing for 1.20x+
+- **Near average (0.8-1.5x market avg)**: Standard scaling, good moments = 1.10-1.20x
+- **Below average (<0.8x market avg)**: Underdog bonus! Strong showing = 1.20-1.40x easier to achieve
+  - Example: Weak character defeats strong opponent = 1.50x+ (major upset!)
+
+**The higher they rise, the harder to climb further!**
+
+📊 **MULTIPLIER RANGES:**
+- **Inactive**: 1.0 (not in chapter OR mentioned positively but no direct action)
+- **Small negative**: 0.90-0.98 (minor stumbles, overshadowed, small setbacks)
+- **Small positive**: 1.02-1.10 (good moments, minor wins, solid character beats)
+- **Medium negative**: 0.70-0.89 (meaningful failures, being outclassed, poor decisions)
+- **Medium positive**: 1.11-1.30 (strong showing, important wins/moments, great character work)
+- **Major defeat**: 0.40-0.69 (devastating loss, humiliation, arc villain defeated)
+- **Major victory**: 1.31-1.70 (defeating major threat, transcendent character moment, epic win)
+- **Catastrophic**: 0.10-0.39 (complete annihilation, total failure)
+- **Legendary**: 1.71-3.00 (defeating arc villain, legendary moment, peak performance)
+
+🔍 **USE "PAST CHANGES" AS CALIBRATION:**
+- See how OTHER characters were valued for similar actions/moments
+- Maintain consistency across characters and chapters
+- Scale appropriately: bigger moments = bigger multipliers
+
+Return JSON: {"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": "..."}"""
+
+        # Format recent history
+        history_text = ""
+        if character.get('recent_history'):
+            history_text = "\nRECENT HISTORY (previous chapters only):\n"
+            for event in character['recent_history'][:3]:
+                # Calculate multiplier from history
+                stock_after = event.get('current_stock', 0)
+                delta = event.get('stock_change', 0)
+                if stock_after > 0 and delta != 0:
+                    stock_before = stock_after - delta
+                    if stock_before > 0:
+                        multiplier = stock_after / stock_before
+                        history_text += f"- Ch. {event['chapter_id']}: {multiplier:.2f}x → {event['description']}\n"
+                    else:
+                        history_text += f"- Ch. {event['chapter_id']}: {event['description']}\n"
                 else:
-                    logger.error("Max retries reached for unexpected error")
-                    return None
+                    history_text += f"- Ch. {event['chapter_id']}: {event['description']}\n"
         
-        return None
-    
-    def _parse_llm_response(self, response: str, chapter_character_values: List[Dict]) -> Optional[CharacterAnalysis]:
-        """Parse and validate LLM JSON response"""
-        try:
-            # Clean the response - remove any markdown formatting
-            cleaned_response = self._clean_json_response(response)
-            
-            # Parse JSON
-            data = json.loads(cleaned_response)
-            
-            # Validate required fields
-            if not isinstance(data, dict):
-                logger.error("LLM response is not a JSON object")
-                return None
-            
-            character_changes = data.get('character_changes', [])
-            new_characters = data.get('new_characters', [])
-            analysis_summary = data.get('analysis_summary', '')
-            
-            # Validate character changes
-            validated_changes = self._validate_character_changes(character_changes, chapter_character_values)
-            
-            # Validate new characters
-            validated_new_characters = self._validate_new_characters(new_characters, chapter_character_values)
-            
-            return CharacterAnalysis(
-                character_changes=validated_changes,
-                new_characters=validated_new_characters,
-                analysis_reasoning=analysis_summary
-            )
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response as JSON: {e}")
-            logger.debug(f"Raw response: {response}")
-            return None
-        except Exception as e:
-            logger.error(f"Error parsing LLM response: {e}")
-            return None
-    
-    def _clean_json_response(self, response: str) -> str:
-        """Clean LLM response to extract valid JSON"""
-        # Remove markdown code blocks
-        response = re.sub(r'```json\s*', '', response)
-        response = re.sub(r'```\s*$', '', response)
+        # Build top stocks list
+        stats = market_context.get('statistics', {})
+        market_avg = stats.get('average', 50)
         
-        # Remove any text before the first {
-        json_start = response.find('{')
-        if json_start > 0:
-            response = response[json_start:]
+        top_stocks_text = ""
+        if market_context.get('top_ten'):
+            top_stocks_text = "\nTOP 10 STOCKS (from previous chapters):\n"
+            for i, char in enumerate(market_context['top_ten'][:10], 1):
+                top_stocks_text += f"  {i}. {char['character_name']}: {char['stock_value']:.0f}\n"
         
-        # Remove any text after the last }
-        json_end = response.rfind('}')
-        if json_end > 0:
-            response = response[:json_end + 1]
+        # Build chapter character history
+        chapter_history_text = ""
+        if market_context.get('chapter_character_history'):
+            chapter_history_text = "\nPAST CHANGES FOR CHARACTERS IN THIS CHAPTER (last 3 changes per character):\n"
+            for hist in market_context['chapter_character_history'][:15]:  # Limit to 15 entries
+                if hist.get('multiplier') is None:
+                    # New character
+                    chapter_history_text += f"  • {hist['character_name']} (Ch.{hist['chapter_id']}): NEW at {hist.get('initial_value', 0):.0f} → {hist.get('reasoning', '')}\n"
+                else:
+                    # Existing character with multiplier
+                    chapter_history_text += f"  • {hist['character_name']} (Ch.{hist['chapter_id']}): {hist['multiplier']:.2f}x → {hist.get('reasoning', '')}\n"
         
-        return response.strip()
-    
-    def _validate_character_changes(self, character_changes: List[Dict], 
-                                  chapter_character_values: List[Dict]) -> List[Dict]:
-        """Validate and filter character changes"""
-        validated_changes = []
-        chapter_wiki_urls = {char['wiki_url'] for char in chapter_character_values}
+        # Calculate expectation tier for guidance
+        stock_ratio = character['current_stock'] / market_avg if market_avg > 0 else 1.0
+        if stock_ratio >= 2.0:
+            expectation_tier = "FAR ABOVE AVG (2x+) - High expectations! Needs EXCEPTIONAL moments for 1.10x+, meeting expectations = 1.00-1.05x"
+        elif stock_ratio >= 1.5:
+            expectation_tier = "ABOVE AVG (1.5-2x) - Elevated expectations. Good = 1.05-1.10x, needs strong showing for 1.20x+"
+        elif stock_ratio >= 0.8:
+            expectation_tier = "NEAR AVG (0.8-1.5x) - Standard scaling. Good moments = 1.10-1.20x"
+        else:
+            expectation_tier = "BELOW AVG (<0.8x) - UNDERDOG BONUS! Strong showing = 1.20-1.40x easier!"
         
-        for change in character_changes:
-            if not isinstance(change, dict):
-                logger.warning("Invalid character change format (not dict)")
-                continue
-            
-            # Required fields
-            wiki_url = change.get('wiki_url', '').strip()
-            name = change.get('name', '').strip()
-            value_change = change.get('value_change')
-            reasoning = change.get('reasoning', '').strip()
-            
-            # Validate required fields
-            if not wiki_url or not name or value_change is None or not reasoning:
-                logger.warning(f"Missing required fields in character change: {change}")
-                continue
-            
-            # Validate value change is numeric
-            try:
-                value_change = int(value_change)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid value_change for {name}: {value_change}")
-                continue
-            
-            # Validate reasonable value change range
-            if abs(value_change) > 100:
-                logger.warning(f"Extreme value change for {name}: {value_change}, capping at ±100")
-                value_change = max(-100, min(100, value_change))
-            
-            # Validate wiki URL format
-            if not self._is_valid_wiki_url(wiki_url):
-                logger.warning(f"Invalid wiki URL format for {name}: {wiki_url}")
-                continue
-            
-            # Check if character was actually in the chapter
-            if wiki_url not in chapter_wiki_urls:
-                logger.warning(f"Character {name} not found in chapter character list, skipping")
-                continue
-            
-            validated_changes.append({
-                'wiki_url': wiki_url,
-                'name': name,
-                'value_change': value_change,
-                'reasoning': reasoning
-            })
-        
-        return validated_changes
-    
-    def _validate_new_characters(self, new_characters: List[Dict], 
-                               chapter_character_values: List[Dict]) -> List[Dict]:
-        """Validate and filter new character introductions"""
-        validated_new_characters = []
-        new_character_urls = {char['wiki_url'] for char in chapter_character_values 
-                             if not char.get('exists_in_db', True)}
-        
-        for new_char in new_characters:
-            if not isinstance(new_char, dict):
-                logger.warning("Invalid new character format (not dict)")
-                continue
-            
-            # Required fields
-            wiki_url = new_char.get('wiki_url', '').strip()
-            name = new_char.get('name', '').strip()
-            starting_value = new_char.get('starting_value')
-            reasoning = new_char.get('reasoning', '').strip()
-            
-            # Validate required fields
-            if not wiki_url or not name or starting_value is None or not reasoning:
-                logger.warning(f"Missing required fields in new character: {new_char}")
-                continue
-            
-            # Validate starting value is numeric and reasonable
-            try:
-                starting_value = int(starting_value)
-            except (ValueError, TypeError):
-                logger.warning(f"Invalid starting_value for {name}: {starting_value}")
-                continue
-            
-            if starting_value < 1 or starting_value > 1000:
-                logger.warning(f"Unreasonable starting value for {name}: {starting_value}, adjusting")
-                starting_value = max(1, min(1000, starting_value))
-            
-            # Validate wiki URL format
-            if not self._is_valid_wiki_url(wiki_url):
-                logger.warning(f"Invalid wiki URL format for new character {name}: {wiki_url}")
-                continue
-            
-            # Check if character was actually identified as new in the chapter
-            if wiki_url not in new_character_urls:
-                logger.warning(f"New character {name} not found in chapter new character list, skipping")
-                continue
-            
-            validated_new_characters.append({
-                'wiki_url': wiki_url,
-                'name': name,
-                'starting_value': starting_value,
-                'reasoning': reasoning
-            })
-        
-        return validated_new_characters
-    
-    def _is_valid_wiki_url(self, url: str) -> bool:
-        """Validate wiki URL format"""
-        if not url:
-            return False
-        
-        # Should contain /wiki/ and be a reasonable character page
-        if '/wiki/' not in url:
-            return False
-        
-        # Should not be category, file, or other non-character pages
-        invalid_patterns = [
-            '/wiki/Category:', '/wiki/File:', '/wiki/Template:', 
-            '/wiki/Help:', '/wiki/Special:', '/wiki/User:'
-        ]
-        
-        for pattern in invalid_patterns:
-            if pattern in url:
-                return False
-        
-        return True
-    
-    def test_analysis(self, test_chapter_data: Dict = None) -> Optional[CharacterAnalysis]:
-        """Test the LLM analysis with sample data"""
-        if not test_chapter_data:
-            test_chapter_data = {
-                'number': 1,
-                'title': 'Romance Dawn',
-                'summary': 'Luffy begins his journey as a pirate and meets Coby. He demonstrates his rubber powers and shows determination to become the Pirate King.'
-            }
-        
-        test_character_values = [
-            {
-                'name': 'Monkey D. Luffy',
-                'wiki_url': '/wiki/Monkey_D._Luffy',
-                'current_value': None,
-                'exists_in_db': False,
-                'recent_activity': []
-            },
-            {
-                'name': 'Coby',
-                'wiki_url': '/wiki/Coby',
-                'current_value': None,
-                'exists_in_db': False,
-                'recent_activity': []
-            }
-        ]
-        
-        test_market_context = {
-            'total_characters': 0,
-            'top_characters': [],
-            'bottom_characters': [],
-            'recent_changes': []
-        }
-        
-        logger.info("Testing LLM analysis with sample data")
-        return self.analyze_chapter(test_chapter_data, test_character_values, test_market_context)
+        user_prompt = f"""EXISTING CHARACTER: {character['name']}
+Current stock: {character['current_stock']:.1f}
+Expectation tier: {expectation_tier}
 
+Chapter {chapter_data['chapter_id']}: {chapter_data['title']}
 
-def create_llm_analyzer(api_key: Optional[str] = None, config: Optional[LLMConfig] = None) -> LLMAnalyzer:
-    """Create and return an LLMAnalyzer instance"""
-    return LLMAnalyzer(api_key, config)
+MARKET CONTEXT (from previous chapters):
+- Market average: {market_avg:.0f}
+- Total characters: {stats.get('total_characters', 0)}
+{top_stocks_text}
+{chapter_history_text}
+{history_text}
+CHAPTER SUMMARY:
+{chapter_data['raw_description']}
+
+What multiplier for {character['name']} based on this chapter?
+⚠️ REMEMBER: Apply EXPECTATION SCALING based on their tier above!
+Return JSON: {{"multiplier": <decimal 0.1-3.0>, "confidence": 0-1, "reasoning": "..."}}"""
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    temperature=0.7
+                )
+                
+                content = response.choices[0].message.content
+                result = json.loads(content)
+                
+                multiplier = float(result['multiplier'])
+                confidence = float(result['confidence'])
+                reasoning = result['reasoning']
+                
+                # Validate
+                if multiplier < 0.05 or multiplier > 5.0:
+                    raise ValueError(f"Multiplier out of range: {multiplier}")
+                
+                if confidence < 0 or confidence > 1:
+                    confidence = max(0, min(1, confidence))
+                
+                # Save log
+                self._save_character_log(character['name'], chapter_data['chapter_id'],
+                                        'EXISTING', system_prompt, user_prompt, content, True)
+                
+                return {
+                    'character_name': character['name'],
+                    'character_href': character['href'],
+                    'stock_change': multiplier,
+                    'confidence': confidence,
+                    'reasoning': reasoning
+                }
+                
+            except Exception as e:
+                # Save failed log
+                self._save_character_log(character['name'], chapter_data['chapter_id'],
+                                        'EXISTING', system_prompt, user_prompt,
+                                        f"Error: {e}", False)
+                
+                if attempt >= max_retries:
+                    print(f"❌ Failed to analyze EXISTING {character['name']}: {e}")
+                    # Return neutral
+                    return {
+                        'character_name': character['name'],
+                        'character_href': character['href'],
+                        'stock_change': 1.0,
+                        'confidence': 0.3,
+                        'reasoning': f"Failed analysis, using neutral (1.0) ({e})"
+                    }
+    
+    def analyze_chapter(self, chapter_data: Dict, market_context: Dict,
+                       temperature: float = 0.7, verbose: bool = False, max_retries: int = 3) -> List[Dict]:
+        """
+        Analyze a chapter and get stock changes (NEW APPROACH: per-character calls).
+        
+        Args:
+            chapter_data: Chapter information
+            market_context: Market state before this chapter
+            temperature: LLM temperature (unused, kept for compatibility)
+            verbose: If True, print progress
+            max_retries: Maximum number of attempts per character
+            
+        Returns:
+            List of stock change dicts
+        """
+        # Step 1: Filter characters
+        all_chars = market_context.get('existing_characters', []) + market_context.get('new_characters', [])
+        filtered_chars = self.filter_characters(all_chars, chapter_data, verbose=verbose)
+        
+        # Split into new and existing based on filtered list
+        filtered_hrefs = {c['href'] for c in filtered_chars}
+        existing_chars = [c for c in market_context.get('existing_characters', []) if c['href'] in filtered_hrefs]
+        new_chars = [c for c in market_context.get('new_characters', []) if c['href'] in filtered_hrefs]
+        
+        if verbose:
+            print(f"📊 {len(existing_chars)} existing + ⭐ {len(new_chars)} new = {len(filtered_chars)} total")
+        
+        # Step 2: Analyze each character separately
+        results = []
+        
+        for char in existing_chars:
+            if verbose:
+                print(f"  📊 {char['name']}... ", end='', flush=True)
+            result = self.analyze_existing_character(char, chapter_data, market_context, verbose=False, max_retries=max_retries)
+            results.append(result)
+            if verbose:
+                print(f"{result['stock_change']:.2f}x")
+                print(f"     └─ {result.get('reasoning', 'No reasoning provided')}")
+        
+        for char in new_chars:
+            if verbose:
+                print(f"  ⭐ {char['name']}... ", end='', flush=True)
+            result = self.analyze_new_character(char, chapter_data, market_context, verbose=False, max_retries=max_retries)
+            results.append(result)
+            if verbose:
+                print(f"{result['stock_change']:.0f}")
+                print(f"     └─ {result.get('reasoning', 'No reasoning provided')}")
+        
+        return results
 
 
 if __name__ == "__main__":
-    # Test the LLM analyzer
-    logging.basicConfig(level=logging.INFO)
+    # Test the analyzer
+    analyzer = LLMAnalyzer()
     
-    try:
-        analyzer = create_llm_analyzer()
-        result = analyzer.test_analysis()
-        
-        if result:
-            print("LLM Analysis Test Results:")
-            print(f"Character Changes: {len(result.character_changes)}")
-            for change in result.character_changes:
-                print(f"  {change['name']}: {change['value_change']:+d} - {change['reasoning']}")
-            
-            print(f"New Characters: {len(result.new_characters)}")
-            for new_char in result.new_characters:
-                print(f"  {new_char['name']}: {new_char['starting_value']} - {new_char['reasoning']}")
-            
-            print(f"Analysis Summary: {result.analysis_reasoning}")
-        else:
-            print("LLM analysis test failed")
-            
-    except Exception as e:
-        print(f"Error testing LLM analyzer: {e}")
+    # Test with mock data
+    chapter_data = {
+        'chapter_id': 1,
+        'title': 'Romance Dawn',
+        'arc_name': 'Romance Dawn Arc',
+        'raw_description': 'Monkey D. Luffy, a young boy, dreams of becoming the Pirate King...'
+    }
+    
+    market_context = {
+        'top_ten': [],
+        'statistics': {'average': 0, 'median': 0, 'total_characters': 0},
+        'existing_characters': [],
+        'new_characters': [
+            {'name': 'Monkey D. Luffy', 'href': '/wiki/Monkey_D._Luffy'},
+            {'name': 'Shanks', 'href': '/wiki/Shanks'}
+        ]
+    }
+    
+    print("Testing new per-character approach...")
+    results = analyzer.analyze_chapter(chapter_data, market_context, verbose=True)
+    print(f"\nResults: {results}")
