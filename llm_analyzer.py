@@ -109,14 +109,16 @@ REMOVE:
 - Locations: "Orange Town", "Shells Town", "East Blue"
 - Military ranks: "Captain", "Lieutenant", "Seaman Recruit"
 - Generic terms: "Villagers", "Townsfolk", "Citizens", "Animals"
-- **Background/cover story characters**: Characters ONLY mentioned briefly or in cover stories/flashbacks but NOT present in THIS chapter's main events
-- **Passive mentions**: Characters only talked ABOUT but who don't appear or take action
+- **Characters NOT MENTIONED AT ALL**: If the character's name doesn't appear ANYWHERE in the chapter summary, remove them
 
 KEEP:
-- Named individuals who APPEAR and DO SOMETHING in this chapter: "Monkey D. Luffy", "Roronoa Zoro", "Buggy", "Nami"
-- Even minor named characters IF they have a scene or action: "Rika", "Helmeppo", "Koby"
+- Named individuals who APPEAR and DO SOMETHING: "Monkey D. Luffy", "Roronoa Zoro", "Buggy", "Nami"
+- Named individuals who are MENTIONED (even if they don't appear): rumors, flashbacks, discussions about them
+  - Example: "Shanks is mentioned in conversation about Luffy's past" → KEEP Shanks
+  - Example: "Characters discuss the legendary pirate Gol D. Roger" → KEEP Roger
+- **Rumors and lore help characters!** Being talked about builds narrative importance
 
-Read the chapter summary carefully to determine who actually appears vs. who is just mentioned!
+Read the chapter summary: if a character's name appears ANYWHERE (action, dialogue, rumor, flashback), KEEP them.
 
 Return JSON: {"keep": ["name1", "name2", ...]}
 """
@@ -132,7 +134,8 @@ CHAPTER SUMMARY:
 Characters extracted from wiki:
 {char_list}
 
-Which are NAMED INDIVIDUALS who ACTUALLY APPEAR and DO SOMETHING in this chapter (not just mentioned, not just in cover stories)?
+Which characters are MENTIONED in the chapter summary above (appearing, talked about, in flashbacks, rumors)?
+If a character's name appears ANYWHERE in the summary, keep them. Only remove generic groups and characters NOT mentioned at all.
 Return JSON: {{"keep": ["exact name from list", ...]}}"""
 
         if verbose:
@@ -395,11 +398,11 @@ Return JSON: {{"stock_value": <integer>, "confidence": 0-1, "reasoning": "..."}}
   - Good moments = 1.05-1.15x
   - Strong victories = 1.15-1.30x
 
-- **Bottom 33% (p0-p33)**: 🔥 **MODEST UNDERDOG BONUS**
-  - Meeting expectations = 1.00-1.08x
-  - Good performance = 1.08-1.18x
-  - Strong showing = 1.18-1.30x (not 1.40x!)
-  - Major upsets possible but rare = 1.35x max
+- **Bottom 33% (p0-p33)**: 🔥 **UNDERDOG BONUS**
+  - Meeting expectations = 1.00-1.10x
+  - Good performance = 1.10-1.25x
+  - Strong showing = 1.25-1.40x
+  - Major upsets = 1.40-1.60x (rare but possible!)
 
 **The market RESISTS growth at the top! Exponential compounding is the enemy!**
 
@@ -500,7 +503,7 @@ Return JSON with an ARRAY of actions:
         elif current_stock >= p33:
             expectation_tier = "✓ TOP 66% (p33-p50) - STANDARD SCALING! Meeting = 1.00-1.05x, good = 1.05-1.15x, strong = 1.15-1.30x"
         else:
-            expectation_tier = "🔥 BOTTOM 33% (p0-p33) - MODEST UNDERDOG BONUS! Meeting = 1.00-1.08x, good = 1.08-1.18x, strong = 1.18-1.30x"
+            expectation_tier = "🔥 BOTTOM 33% (p0-p33) - UNDERDOG BONUS! Meeting = 1.00-1.10x, good = 1.10-1.25x, strong = 1.25-1.40x, upsets = 1.40-1.60x"
         
         user_prompt = f"""EXISTING CHARACTER: {character['name']}
 Current stock: {character['current_stock']:.1f}
