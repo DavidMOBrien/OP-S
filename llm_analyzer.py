@@ -188,11 +188,17 @@ Return JSON: {{"keep": ["exact name from list", ...]}}"""
 7. **Threat/Hype** - Being built up as dangerous, mentioned with fear/respect, anticipated arrival
 8. **Comparative Context** - How they compare to OTHER characters' past debuts (see "PAST CHANGES" below)
 
-⚖️ **CRITICAL MINDSET:**
+⚖️ **CRITICAL MINDSET** (BE BOLD - NO FAVORITISM!):
 - **Character moments = Combat moments** - A powerful emotional scene is as valuable as winning a fight
-- **Heroes are NOT immune** - Punish cowardice, poor choices, character regression
-- **Villains can DOMINATE** - Reward threatening presence, effective schemes, being feared
-- **Role fulfillment matters** - Villain being scary = GOOD, hero being inspiring = GOOD
+- **BE HARSH ON HERO MISTAKES**: If a hero is cowardly, makes dumb choices, fails their team, whines, regresses, or fumbles a situation → PUNISH THEM! No excuses!
+  - Heroes getting captured due to carelessness = NEGATIVE stock
+  - Heroes being indecisive or weak-willed = NEGATIVE stock
+  - Heroes failing to protect someone = NEGATIVE stock
+- **CELEBRATE VILLAIN SUCCESS**: Villain being threatening, intimidating, clever, successfully executing schemes, or advancing their goals = POSITIVE stock!
+  - Villain successfully capturing the hero = POSITIVE for villain
+  - Villain's reputation/hype growing = POSITIVE for villain
+  - Villain dominating a scene = POSITIVE for villain
+- **Role fulfillment > Alignment**: A villain being effective at being evil = stock UP. A hero fumbling = stock DOWN.
 - **Being hyped/anticipated is POSITIVE** - If other characters fear/mention a villain, that's a strength!
 
 📊 **SCALING (use "PAST CHANGES" as reference for consistency):**
@@ -337,15 +343,21 @@ Return JSON: {{"stock_value": <integer>, "confidence": 0-1, "reasoning": "..."}}
 7. **Role Fulfillment** - How well they execute their narrative role (hero being inspiring, villain being threatening)
 8. **Comparative Context** - How their actions compare to OTHER characters in similar situations (see "PAST CHANGES")
 
-⚖️ **CRITICAL MINDSET:**
+⚖️ **CRITICAL MINDSET** (BE BOLD - NO PROTAGONIST BIAS!):
 - **Character moments = Combat moments** - Emotional scene with great writing is AS valuable as winning a fight
-- **Heroes are NOT immune** - Punish cowardice, regression, poor choices, fumbling
-- **Villains can DOMINATE** - Reward threatening presence, successful schemes, being feared/hyped
+- **BE HARSH ON HERO MISTAKES**: When heroes mess up, GET CAPTURED due to carelessness, make DUMB DECISIONS, are COWARDLY, WHINE, or FUMBLE → PUNISH THEM with negative multipliers! Don't coddle the protagonists!
+  - Getting captured by villains due to carelessness = 0.70-0.85x (not just 0.95x!)
+  - Making poor strategic choices that hurt the team = 0.80-0.90x
+  - Being indecisive or showing weakness = 0.85-0.95x
+- **CELEBRATE VILLAIN EFFECTIVENESS**: When villains are THREATENING, successfully CAPTURE heroes, INTIMIDATE others, execute CLEVER SCHEMES, or advance their goals → REWARD THEM with positive multipliers!
+  - Villain successfully capturing protagonist = 1.15-1.30x (they're doing their job!)
+  - Villain's hype/reputation growing = 1.10-1.20x
+  - Villain dominating a scene with presence = 1.10-1.25x
 - **Absence vs. Defeat are DIFFERENT**:
-  - **Not appearing but being mentioned/hyped** = INACTIVE (1.0) or small positive if building threat
+  - **Not appearing but being mentioned/hyped** = INACTIVE (1.0) or small positive if threat is building
   - **Actually losing/being defeated** = NEGATIVE multiplier
-  - **Don't punish characters for not being in the chapter!**
-- **Net outcome matters** - Focus on chapter's END result, not micro-moments
+  - **Don't punish for absence!**
+- **Net outcome matters** - Focus on chapter's END result, not every micro-moment
 - **Heroic sacrifice = GAIN**, **Wise restraint = STRENGTH**, **Strategic deception = INTELLIGENCE**
 
 🎚️ **EXPECTATION SCALING** (CRITICAL - prevents runaway growth!):
