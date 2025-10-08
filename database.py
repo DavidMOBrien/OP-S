@@ -86,6 +86,7 @@ class Database:
                 cumulative_stock_value REAL NOT NULL,
                 chapter_change REAL NOT NULL,
                 market_rank INTEGER,
+                chapter_reasoning TEXT,
                 FOREIGN KEY (character_id) REFERENCES characters(character_id),
                 FOREIGN KEY (chapter_id) REFERENCES chapters(chapter_id),
                 UNIQUE(character_id, chapter_id)
@@ -399,20 +400,29 @@ class Database:
         
         self.conn.commit()
         
-    def update_stock_history(self, chapter_id: int):
-        """Update stock history for all characters after processing a chapter."""
+    def update_stock_history(self, chapter_id: int, character_reasonings: dict = None):
+        """Update stock history for all characters after processing a chapter.
+        
+        Args:
+            chapter_id: The chapter being processed
+            character_reasonings: Dict mapping character_id to chapter-level reasoning text
+        """
         cursor = self.conn.cursor()
+        
+        if character_reasonings is None:
+            character_reasonings = {}
         
         # Get all characters with events in this chapter
         cursor.execute("""
-            SELECT DISTINCT character_id, stock_change
+            SELECT character_id, SUM(stock_change) as total_change
             FROM market_events
             WHERE chapter_id = ?
+            GROUP BY character_id
         """, (chapter_id,))
         
         for row in cursor.fetchall():
             character_id = row['character_id']
-            chapter_change = row['stock_change']
+            chapter_change = row['total_change']
             
             # Calculate cumulative value
             cumulative_value = self.calculate_current_stock(character_id, chapter_id)
@@ -422,13 +432,16 @@ class Database:
             rank = next((i + 1 for i, s in enumerate(top_stocks) 
                         if s['character_id'] == character_id), None)
             
+            # Get reasoning for this character
+            reasoning = character_reasonings.get(character_id, None)
+            
             # Save to history
             cursor.execute("""
                 INSERT OR REPLACE INTO character_stock_history
                 (character_id, chapter_id, cumulative_stock_value, 
-                 chapter_change, market_rank)
-                VALUES (?, ?, ?, ?, ?)
-            """, (character_id, chapter_id, cumulative_value, chapter_change, rank))
+                 chapter_change, market_rank, chapter_reasoning)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (character_id, chapter_id, cumulative_value, chapter_change, rank, reasoning))
             
         self.conn.commit()
         

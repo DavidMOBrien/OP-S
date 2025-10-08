@@ -137,7 +137,7 @@ Characters extracted from wiki:
 Which characters are MENTIONED in the chapter summary above (appearing, talked about, in flashbacks, rumors)?
 If a character's name appears ANYWHERE in the summary, keep them. Only remove generic groups and characters NOT mentioned at all.
 Return JSON: {{"keep": ["exact name from list", ...]}}"""
-
+        
         if verbose:
             print(f"\n🔍 FILTERING {len(characters)} characters...")
         
@@ -170,7 +170,7 @@ Return JSON: {{"keep": ["exact name from list", ...]}}"""
         except Exception as e:
             print(f"⚠️  Filter failed ({e}), keeping all characters")
             return characters
-    
+            
     def analyze_new_character(self, character: Dict, chapter_data: Dict, 
                             market_context: Dict, verbose: bool = False, max_retries: int = 3) -> Dict:
         """
@@ -199,7 +199,10 @@ Return JSON: {{"keep": ["exact name from list", ...]}}"""
 8. **Comparative Context** - How they compare to OTHER characters' past debuts (see "PAST CHANGES" below)
 
 ⚖️ **CRITICAL MINDSET** (BE BOLD - NO FAVORITISM!):
+- **USE CURRENT MARKET CONTEXT**: Base your valuation on the CURRENT MARKET LEVEL (see percentiles below), not your general knowledge. Scale new characters appropriately to where the market is NOW!
 - **Character moments = Combat moments** - A powerful emotional scene is as valuable as winning a fight
+- **VULNERABILITY CAN BE POWERFUL**: Emotional vulnerability, crying, showing fear can be WELL-WRITTEN CHARACTER MOMENTS during a debut
+  - Only reduce initial stock if vulnerability represents COWARDICE or POOR WRITING (not genuine emotion!)
 - **BE HARSH ON HERO MISTAKES**: If a hero is cowardly, makes dumb choices, fails their team, whines, regresses, or fumbles a situation → PUNISH THEM! No excuses!
   - Heroes getting captured due to carelessness = NEGATIVE stock
   - Heroes being indecisive or weak-willed = NEGATIVE stock
@@ -354,15 +357,27 @@ Return JSON: {{"stock_value": <integer>, "confidence": 0-1, "reasoning": "..."}}
 8. **Comparative Context** - How their actions compare to OTHER characters in similar situations (see "PAST CHANGES")
 
 ⚖️ **CRITICAL MINDSET** (BE BOLD - NO PROTAGONIST BIAS!):
+- **USE CURRENT STOCK VALUES, NOT PERCEIVED IMAGE**: Base your evaluation on THIS CHARACTER'S ACTUAL CURRENT STOCK (see below), NOT your general knowledge of who they are. A character at 100 stock should be treated differently than the same character at 3000 stock!
 - **Character moments = Combat moments** - Emotional scene with great writing is AS valuable as winning a fight
+- **VULNERABILITY CAN BE POWERFUL**: Emotional vulnerability, crying, showing fear can be WELL-WRITTEN CHARACTER MOMENTS:
+  - Example: Nami crying while Luffy fights for her = POSITIVE (emotional depth, trust, powerful scene)
+  - Example: Character showing human emotion during crisis = NEUTRAL to POSITIVE (depends on writing quality)
+  - Only punish vulnerability if it represents COWARDICE, BETRAYAL, or POOR WRITING (not genuine emotion!)
 - **BE HARSH ON HERO MISTAKES**: When heroes mess up, GET CAPTURED due to carelessness, make DUMB DECISIONS, are COWARDLY, WHINE, or FUMBLE → PUNISH THEM with negative multipliers! Don't coddle the protagonists!
   - Getting captured by villains due to carelessness = 0.70-0.85x (not just 0.95x!)
   - Making poor strategic choices that hurt the team = 0.80-0.90x
   - Being indecisive or showing weakness = 0.85-0.95x
+  - **HIGHER TIER = HARSHER PUNISHMENTS** (see expectation scaling below)
 - **CELEBRATE VILLAIN EFFECTIVENESS**: When villains are THREATENING, successfully CAPTURE heroes, INTIMIDATE others, execute CLEVER SCHEMES, or advance their goals → REWARD THEM with positive multipliers!
   - Villain successfully capturing protagonist = 1.15-1.30x (they're doing their job!)
   - Villain's hype/reputation growing = 1.10-1.20x
   - Villain dominating a scene with presence = 1.10-1.25x
+- **BATTLE DEFEATS & VICTORIES**:
+  - **When character A DEFEATS character B in battle**: 
+    - Winner gets BONUS based on loser's current stock (see "CURRENT STOCKS IN CHAPTER" below)
+    - Loser gets HEAVY PUNISHMENT (0.30-0.60x depending on their tier - higher tier = worse punishment)
+  - **Defeating someone with HIGH stock is MORE valuable** than defeating someone with low stock
+  - **Being defeated when you have HIGH stock is MORE damaging** (high expectations!)
 - **Absence vs. Defeat are DIFFERENT**:
   - **Not appearing but being mentioned/hyped** = INACTIVE (1.0) or small positive if threat is building
   - **Actually losing/being defeated** = NEGATIVE multiplier
@@ -371,44 +386,75 @@ Return JSON: {{"stock_value": <integer>, "confidence": 0-1, "reasoning": "..."}}
 - **Heroic sacrifice = GAIN**, **Wise restraint = STRENGTH**, **Strategic deception = INTELLIGENCE**
 
 🎚️ **EXPECTATION SCALING** (CRITICAL - prevents exponential growth!):
-**Higher stock = MUCH higher expectations = VERY hard to gain, EASY to lose**
+**Higher stock = MUCH higher expectations = SUCCESSES mean less, FAILURES hurt more**
+
+⚠️ **CRITICAL: "PASSIVE/INACTIVE" = ALWAYS 1.0x REGARDLESS OF TIER**
+- If a character is just PRESENT but not doing anything significant = 1.0x (no change)
+- Being in a conversation without meaningful impact = 1.0x
+- Background presence = 1.0x
+- **Don't punish characters for just existing!**
 
 **Use PERCENTILES (see "MARKET CONTEXT" below) - NOT average!**
 
-- **Top 10% (p90+)**: 🚫 **EXTREME RESTRICTIONS**
-  - Meeting expectations = **0.98-1.00x** (neutral to slight LOSS)
-  - Good performance = 1.00-1.02x (barely positive)
+The tier system applies to ACTIVE moments (successes and failures), NOT passive existence:
+
+- **Top 10% (p90+)**: 🚫 **EXTREME RESTRICTIONS - SUCCESSES BARELY MATTER, FAILURES ARE DEVASTATING**
+  - Passive/Inactive = **1.0x** (no punishment for existing!)
+  - Doing their normal job well = **1.00-1.02x** (barely positive - expected performance)
+  - Good performance = 1.02-1.05x (still modest)
   - ONLY **LEGENDARY** moments justify 1.05x+ (defeating arc villain, transcendent moment)
-  - Defeats are DEVASTATING = 0.30-0.50x
+  - Minor failures/mistakes = **0.70-0.85x** (we expect MORE from top tier!)
+  - Major defeats = **0.30-0.50x** (DEVASTATING - but allows recovery from ~10 stock minimum)
+  - Being defeated by lower-tier opponent = **0.25-0.40x** (complete humiliation but not death spiral)
 
-- **Top 25% (p75-p90)**: ⚠️ **VERY HIGH RESTRICTIONS**
-  - Meeting expectations = 0.99-1.01x (nearly neutral)
-  - Strong performance = 1.01-1.05x
-  - Major victories = 1.05-1.15x
-  - Defeats are harsh = 0.50-0.70x
+- **Top 25% (p75-p90)**: ⚠️ **VERY HIGH RESTRICTIONS - DIMINISHED REWARDS, HARSH PUNISHMENTS**
+  - Passive/Inactive = **1.0x** (no punishment for existing!)
+  - Doing their normal job well = 1.00-1.03x (modest gain)
+  - Strong performance = 1.03-1.08x
+  - Major victories = 1.08-1.15x
+  - Minor failures = **0.75-0.90x** (high expectations)
+  - Major defeats = **0.40-0.60x** (very harsh but recoverable)
+  - Being defeated by lower-tier = **0.35-0.50x** (humiliating but not death spiral)
 
-- **Top 50% (p50-p75)**: ⚡ **MODERATE RESTRICTIONS**
-  - Meeting expectations = 1.00-1.02x
-  - Good performance = 1.02-1.08x
-  - Strong victories = 1.08-1.20x
+- **Top 50% (p50-p75)**: ⚡ **MODERATE RESTRICTIONS - BALANCED REWARDS AND PUNISHMENTS**
+  - Passive/Inactive = **1.0x** (no punishment for existing!)
+  - Doing their normal job well = 1.00-1.05x
+  - Good performance = 1.05-1.10x
+  - Strong victories = 1.10-1.20x
+  - Minor failures = 0.85-0.95x
+  - Major defeats = **0.50-0.70x** (significant)
+  - Being defeated by lower-tier = **0.40-0.60x** (embarrassing)
+
+- **Top 66% (p33-p50)**: ✓ **STANDARD SCALING - NORMAL REWARDS AND PUNISHMENTS**
+  - Passive/Inactive = **1.0x** (no punishment for existing!)
+  - Doing their normal job well = 1.00-1.08x
+  - Good moments = 1.08-1.20x
+  - Strong victories = 1.20-1.30x
+  - Minor failures = 0.80-0.95x
   - Defeats = 0.60-0.80x
 
-- **Top 66% (p33-p50)**: ✓ **STANDARD SCALING**
-  - Meeting expectations = 1.00-1.05x
-  - Good moments = 1.05-1.15x
-  - Strong victories = 1.15-1.30x
-
-- **Bottom 33% (p0-p33)**: 🔥 **UNDERDOG BONUS**
-  - Meeting expectations = 1.00-1.10x
-  - Good performance = 1.10-1.25x
-  - Strong showing = 1.25-1.40x
+- **Bottom 33% (p0-p33)**: 🔥 **UNDERDOG BONUS - BIG REWARDS, LIGHT PUNISHMENTS**
+  - Passive/Inactive = **1.0x** (no punishment for existing!)
+  - Doing their normal job = 1.00-1.15x
+  - Good performance = 1.15-1.30x
+  - Strong showing = 1.30-1.40x
   - Major upsets = 1.40-1.60x (rare but possible!)
+  - Defeats = 0.70-0.90x (expected to lose sometimes)
 
-**The market RESISTS growth at the top! Exponential compounding is the enemy!**
+**KEY PRINCIPLE: Tier affects how much you GAIN from success and how much you LOSE from failure.**
+**It does NOT punish passive existence. Inactive = 1.0x for ALL tiers.**
+
+⚠️ **STOCK FLOOR - PREVENT DEATH SPIRALS**:
+- Characters should NEVER drop below ~10 stock (allows recovery later)
+- When evaluating a character BELOW 25 stock, be LESS harsh with punishments
+- Villains who lose can still climb back up with good moments later
+- Use multipliers that keep them above 10: if current stock is 15, don't use 0.30x (would give 4.5), use 0.70x instead (gives 10.5)
 
 📊 **MULTIPLIER RANGES:**
-- **Inactive**: 1.0 (not in chapter OR mentioned positively but no direct action)
-- **Small negative**: 0.90-0.98 (minor stumbles, overshadowed, small setbacks)
+- **Inactive/Passive**: 1.0 (character is present but not taking meaningful action - NO PUNISHMENT FOR EXISTING!)
+  - Examples: being in a conversation without impact, background presence, just observing
+  - ⚠️ APPLIES TO ALL TIERS - passive existence is never punished!
+- **Small negative**: 0.90-0.98 (minor stumbles, overshadowed, small setbacks - but still DOING something)
 - **Small positive**: 1.02-1.10 (good moments, minor wins, solid character beats)
 - **Medium negative**: 0.70-0.89 (meaningful failures, being outclassed, poor decisions)
 - **Medium positive**: 1.11-1.30 (strong showing, important wins/moments, great character work)
@@ -495,15 +541,25 @@ Return JSON with an ARRAY of actions:
         p33 = stats.get('p33', market_avg * 0.8)
         
         if current_stock >= p90:
-            expectation_tier = "🚫 TOP 10% (p90+) - EXTREME RESTRICTIONS! Meeting expectations = 0.98-1.00x, good = 1.00-1.02x, ONLY legendary = 1.05x+"
+            expectation_tier = "🚫 TOP 10% (p90+) - SUCCESSES BARELY REWARDED, FAILURES DEVASTATING! Passive = 1.0x, normal job = 1.00-1.02x, good = 1.02-1.05x, ONLY legendary = 1.05x+, failures = 0.70-0.85x, defeats = 0.30-0.50x"
         elif current_stock >= p75:
-            expectation_tier = "⚠️ TOP 25% (p75-p90) - VERY HIGH RESTRICTIONS! Meeting = 0.99-1.01x, strong = 1.01-1.05x, major wins = 1.05-1.15x"
+            expectation_tier = "⚠️ TOP 25% (p75-p90) - DIMINISHED REWARDS, HARSH PUNISHMENTS! Passive = 1.0x, normal job = 1.00-1.03x, strong = 1.03-1.08x, major wins = 1.08-1.15x, failures = 0.75-0.90x, defeats = 0.40-0.60x"
         elif current_stock >= p50:
-            expectation_tier = "⚡ TOP 50% (p50-p75) - MODERATE RESTRICTIONS! Meeting = 1.00-1.02x, good = 1.02-1.08x, strong = 1.08-1.20x"
+            expectation_tier = "⚡ TOP 50% (p50-p75) - BALANCED SCALING! Passive = 1.0x, normal job = 1.00-1.05x, good = 1.05-1.10x, strong = 1.10-1.20x, failures = 0.85-0.95x, defeats = 0.50-0.70x"
         elif current_stock >= p33:
-            expectation_tier = "✓ TOP 66% (p33-p50) - STANDARD SCALING! Meeting = 1.00-1.05x, good = 1.05-1.15x, strong = 1.15-1.30x"
+            expectation_tier = "✓ TOP 66% (p33-p50) - NORMAL SCALING! Passive = 1.0x, normal job = 1.00-1.08x, good = 1.08-1.20x, strong = 1.20-1.30x, failures = 0.80-0.95x, defeats = 0.60-0.80x"
         else:
-            expectation_tier = "🔥 BOTTOM 33% (p0-p33) - UNDERDOG BONUS! Meeting = 1.00-1.10x, good = 1.10-1.25x, strong = 1.25-1.40x, upsets = 1.40-1.60x"
+            expectation_tier = "🔥 BOTTOM 33% (p0-p33) - UNDERDOG BONUS! Passive = 1.0x, normal job = 1.00-1.15x, good = 1.15-1.30x, strong = 1.30-1.40x, upsets = 1.40-1.60x, defeats = 0.70-0.90x"
+        
+        # Build current chapter stocks text
+        chapter_stocks_text = ""
+        if market_context.get('existing_characters'):
+            chapter_stocks_text = "\nCURRENT STOCKS IN THIS CHAPTER (for evaluating battle outcomes):\n"
+            # Sort by stock value for easier reference
+            sorted_chars = sorted(market_context['existing_characters'], 
+                                key=lambda x: x.get('current_stock', 0), reverse=True)
+            for char in sorted_chars[:20]:  # Limit to top 20 to avoid prompt bloat
+                chapter_stocks_text += f"  • {char['name']}: {char.get('current_stock', 0):.0f}\n"
         
         user_prompt = f"""EXISTING CHARACTER: {character['name']}
 Current stock: {character['current_stock']:.1f}
@@ -516,6 +572,7 @@ MARKET CONTEXT (from previous chapters):
 - Average: {market_avg:.0f} | Median: {stats.get('median', 0):.0f}
 - Total characters: {stats.get('total_characters', 0)}
 {top_stocks_text}
+{chapter_stocks_text}
 {chapter_history_text}
 {history_text}
 CHAPTER SUMMARY:
@@ -524,6 +581,8 @@ CHAPTER SUMMARY:
 What actions/moments did {character['name']} have in this chapter?
 ⚠️ REMEMBER: 
 - Apply EXPECTATION SCALING based on their tier above!
+- Use THIS CHARACTER'S CURRENT STOCK ({character['current_stock']:.1f}), not your general knowledge of them!
+- When evaluating battle victories/defeats, check opponent stock values in "CURRENT STOCKS IN THIS CHAPTER"
 - List ALL significant actions chronologically
 - Each action gets its own multiplier
 Return JSON: {{"actions": [{{"description": "...", "multiplier": X.XX}}, ...], "confidence": 0-1, "reasoning": "..."}}"""
@@ -571,7 +630,7 @@ Return JSON: {{"actions": [{{"description": "...", "multiplier": X.XX}}, ...], "
                     'character_href': character['href'],
                     'stock_change': final_multiplier,
                     'actions': actions,  # Include individual actions
-                    'confidence': confidence,
+                'confidence': confidence,
                     'reasoning': reasoning
                 }
                 

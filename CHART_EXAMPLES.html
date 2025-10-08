@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One Piece Stock Tracker - Chart Examples</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #0F0F0F;
+            color: #F5F5F5;
+            padding: 40px;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+            color: #FFFFFF;
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            color: #A3A3A3;
+            margin-bottom: 60px;
+        }
+        
+        h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 32px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            margin: 60px 0 24px 0;
+            color: #FFFFFF;
+        }
+        
+        .chart-card {
+            background: linear-gradient(135deg, #1A1A1A 0%, #252525 100%);
+            border-radius: 16px;
+            border: 1px solid #2A2A2A;
+            padding: 32px;
+            margin-bottom: 40px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .chart-card:hover {
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4),
+                        0 0 60px rgba(255, 255, 255, 0.05);
+        }
+        
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #2A2A2A;
+        }
+        
+        .chart-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            font-weight: 600;
+            color: #FFFFFF;
+            margin-bottom: 8px;
+        }
+        
+        .chart-subtitle {
+            font-size: 14px;
+            color: #737373;
+        }
+        
+        .stock-display {
+            text-align: right;
+        }
+        
+        .stock-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 36px;
+            font-weight: 600;
+            color: #FFFFFF;
+            line-height: 1;
+        }
+        
+        .stock-change {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 500;
+            margin-top: 8px;
+        }
+        
+        .stock-change.positive {
+            color: #10B981;
+        }
+        
+        .stock-change.negative {
+            color: #EF4444;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 24px;
+        }
+        
+        .chart-svg {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .grid-line {
+            stroke: rgba(255, 255, 255, 0.05);
+            stroke-width: 1;
+        }
+        
+        .chart-line {
+            fill: none;
+            stroke: #FFFFFF;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        
+        .chart-line.gain {
+            stroke: #10B981;
+        }
+        
+        .chart-line.loss {
+            stroke: #EF4444;
+        }
+        
+        
+        .chart-point {
+            fill: #FFFFFF;
+            stroke: #0F0F0F;
+            stroke-width: 3;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .chart-point:hover {
+            r: 7;
+            fill: #FFFFFF;
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
+        }
+        
+        .chart-point.active {
+            r: 7;
+            fill: #FFFFFF;
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.6));
+        }
+        
+        .axis-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            fill: #737373;
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: linear-gradient(135deg, #252525 0%, #1A1A1A 100%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6),
+                        0 0 60px rgba(255, 255, 255, 0.1);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            z-index: 1000;
+        }
+        
+        .tooltip.visible {
+            opacity: 1;
+        }
+        
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%) rotate(45deg);
+            width: 12px;
+            height: 12px;
+            background: #252525;
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .tooltip-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .tooltip-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #737373;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .tooltip-multiplier {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: #FFFFFF;
+        }
+        
+        .tooltip-multiplier.positive {
+            color: #10B981;
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+        }
+        
+        .tooltip-multiplier.negative {
+            color: #EF4444;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+        
+        .tooltip-description {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #D4D4D4;
+            margin-bottom: 12px;
+        }
+        
+        .tooltip-values {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #A3A3A3;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .tooltip-values span {
+            font-family: 'JetBrains Mono', monospace;
+            color: #F5F5F5;
+            font-weight: 500;
+        }
+        
+        .action-list {
+            margin-top: 24px;
+        }
+        
+        .action-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        
+        .action-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .action-item.highlighted {
+            background: rgba(255, 255, 255, 0.08);
+            border-left: 2px solid #FFFFFF;
+        }
+        
+        .action-number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: #737373;
+            min-width: 60px;
+        }
+        
+        .action-description {
+            flex: 1;
+            font-size: 14px;
+            color: #A3A3A3;
+        }
+        
+        .action-multiplier {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 600;
+            color: #FFFFFF;
+            min-width: 70px;
+            text-align: right;
+        }
+        
+        .action-multiplier.positive {
+            color: #10B981;
+        }
+        
+        .action-multiplier.negative {
+            color: #EF4444;
+        }
+        
+        .legend {
+            display: flex;
+            gap: 24px;
+            margin-top: 16px;
+            font-size: 14px;
+            color: #A3A3A3;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #FFFFFF;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Chart Examples</h1>
+        <p class="subtitle">Hover over points to see detailed information</p>
+        
+        <h2>Chapter View - Individual Actions</h2>
+        <p style="color: #A3A3A3; margin-bottom: 24px;">Each point represents one action/moment in the chapter</p>
+        
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Monkey D. Luffy</div>
+                    <div class="chart-subtitle">Chapter 92 • 10 Actions</div>
+                </div>
+                <div class="stock-display">
+                    <div class="stock-value">231.8</div>
+                    <div class="stock-change positive">↑ +116.4 (+100.9%)</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <svg class="chart-svg" id="chapter-chart">
+                    <defs>
+                        <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.08" />
+                            <stop offset="100%" style="stop-color:#FFFFFF;stop-opacity:0" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="tooltip" id="chapter-tooltip">
+                    <div class="tooltip-header">
+                        <span class="tooltip-label">Action 3</span>
+                        <span class="tooltip-multiplier positive">1.08x ↑</span>
+                    </div>
+                    <div class="tooltip-description">
+                        Luffy uses his finger shield to block Arlong's attack and bounces away from the impact, demonstrating creativity and resourcefulness.
+                    </div>
+                    <div class="tooltip-values">
+                        <div>Before: <span>115.4</span></div>
+                        <div>→</div>
+                        <div>After: <span>124.6</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="action-list" id="action-list">
+                <!-- Actions will be populated by JavaScript -->
+            </div>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #10B981;"></div>
+                    <span>Stock Gain</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #FFFFFF;"></div>
+                    <span>Hover for Details</span>
+                </div>
+            </div>
+        </div>
+        
+        <h2>Character View - Chapter History</h2>
+        <p style="color: #A3A3A3; margin-bottom: 24px;">Each point represents one chapter's total performance</p>
+        
+        <div class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Roronoa Zoro</div>
+                    <div class="chart-subtitle">Chapters 3-97 • 95 Appearances</div>
+                </div>
+                <div class="stock-display">
+                    <div class="stock-value">652.3</div>
+                    <div class="stock-change negative">↓ -110.6 (-14.5%)</div>
+                </div>
+            </div>
+            
+            <div class="chart-container">
+                <svg class="chart-svg" id="character-chart">
+                    <defs>
+                        <linearGradient id="gradient2" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.08" />
+                            <stop offset="100%" style="stop-color:#FFFFFF;stop-opacity:0" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <div class="tooltip" id="character-tooltip">
+                    <div class="tooltip-header">
+                        <span class="tooltip-label">Chapter 92</span>
+                        <span class="tooltip-multiplier positive">1.15x ↑</span>
+                    </div>
+                    <div class="tooltip-description">
+                        Zoro demonstrates his loyalty and combat prowess, engaging in a fierce battle that showcases his swordsmanship and determination.
+                    </div>
+                    <div class="tooltip-values">
+                        <div>Before: <span>540.0</span></div>
+                        <div>→</div>
+                        <div>After: <span>621.0</span></div>
+                    </div>
+                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 12px; color: #A3A3A3; display: flex; justify-content: space-between;">
+                        <div>Change: <span style="color: #10B981; font-family: 'JetBrains Mono', monospace;">+81.0 (+15.0%)</span></div>
+                        <div>Confidence: <span style="color: #F5F5F5; font-family: 'JetBrains Mono', monospace;">0.85</span></div>
+                    </div>
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 11px; color: #737373; font-style: italic; text-align: center;">
+                        Click to view detailed chapter analysis
+                    </div>
+                </div>
+            </div>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-dot"></div>
+                    <span>Stock Value Over Time</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #10B981;"></div>
+                    <span>Gain</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #EF4444;"></div>
+                    <span>Loss</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Chapter Chart Data (10 actions)
+        const chapterData = [
+            { action: 1, value: 115.4, mult: 1.03, desc: "Luffy challenges Arlong to come out of the pool despite being beaten, showcasing his determination." },
+            { action: 2, value: 118.9, mult: 1.08, desc: "Luffy uses his finger to create a shield against Arlong's attack, demonstrating creativity and resourcefulness." },
+            { action: 3, value: 128.4, mult: 1.05, desc: "Luffy manages to block Arlong's direct attack with his finger shield, showing resilience and quick thinking." },
+            { action: 4, value: 121.6, mult: 0.95, desc: "Luffy takes a massive hit from Arlong and is sent flying backward, appearing momentarily overwhelmed." },
+            { action: 5, value: 133.8, mult: 1.10, desc: "Luffy recovers and counters with a powerful Gum-Gum attack, turning the tide back in his favor." },
+            { action: 6, value: 147.1, mult: 1.10, desc: "Luffy stomps on Arlong's chest, sending him crashing down, which impresses the onlookers." },
+            { action: 7, value: 141.0, mult: 0.96, desc: "Arlong gets back up and lands a crushing blow, making it seem like Luffy might be defeated." },
+            { action: 8, value: 165.1, mult: 1.17, desc: "Luffy grabs onto Arlong's blade, stopping him from moving his sword, showcasing his strength and defiance." },
+            { action: 9, value: 180.0, mult: 1.09, desc: "Luffy notices Nami's blood-encrusted pen and is filled with righteous anger, raising the emotional stakes." },
+            { action: 10, value: 231.8, mult: 1.29, desc: "Luffy shatters Arlong's blade with his bare hand, fueled by anger about Arlong using Nami, displaying character growth and emotional commitment." }
+        ];
+        
+        // Character Chart Data (20 chapters shown)
+        const characterData = [
+            { chapter: 3, value: 40, change: 0 },
+            { chapter: 8, value: 52, change: 1.30 },
+            { chapter: 15, value: 68, change: 1.31 },
+            { chapter: 22, value: 85, change: 1.25 },
+            { chapter: 35, value: 145, change: 1.71 },
+            { chapter: 48, value: 210, change: 1.45 },
+            { chapter: 55, value: 298, change: 1.42 },
+            { chapter: 62, value: 385, change: 1.29 },
+            { chapter: 70, value: 468, change: 1.22 },
+            { chapter: 75, value: 512, change: 1.09 },
+            { chapter: 80, value: 540, change: 1.05 },
+            { chapter: 85, value: 621, change: 1.15 },
+            { chapter: 88, value: 680, change: 1.09 },
+            { chapter: 90, value: 748, change: 1.10 },
+            { chapter: 92, value: 862, change: 1.15 },
+            { chapter: 93, value: 820, change: 0.95 },
+            { chapter: 94, value: 763, change: 0.93 },
+            { chapter: 95, value: 740, change: 0.97 },
+            { chapter: 96, value: 763, change: 1.03 },
+            { chapter: 97, value: 652, change: 0.85 }
+        ];
+        
+        // Draw Chapter Chart
+        function drawChapterChart() {
+            const svg = document.getElementById('chapter-chart');
+            const tooltip = document.getElementById('chapter-tooltip');
+            const width = svg.clientWidth;
+            const height = svg.clientHeight;
+            const padding = { top: 30, right: 30, bottom: 40, left: 60 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+            
+            const maxValue = Math.max(...chapterData.map(d => d.value));
+            const minValue = Math.min(...chapterData.map(d => d.value));
+            
+            // Draw grid lines
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (chartHeight / 4) * i;
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', padding.left);
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width - padding.right);
+                line.setAttribute('y2', y);
+                line.setAttribute('class', 'grid-line');
+                svg.appendChild(line);
+                
+                // Y-axis label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', padding.left - 10);
+                text.setAttribute('y', y + 4);
+                text.setAttribute('text-anchor', 'end');
+                text.setAttribute('class', 'axis-label');
+                text.textContent = (maxValue - (maxValue - minValue) * (i / 4)).toFixed(0);
+                svg.appendChild(text);
+            }
+            
+            // Build area path
+            let areaData = '';
+            chapterData.forEach((d, i) => {
+                const x = padding.left + (chartWidth / (chapterData.length - 1)) * i;
+                const y = padding.top + chartHeight - ((d.value - minValue) / (maxValue - minValue)) * chartHeight;
+                
+                if (i === 0) {
+                    areaData = `M ${x} ${height - padding.bottom} L ${x} ${y}`;
+                } else {
+                    areaData += ` L ${x} ${y}`;
+                }
+            });
+            areaData += ` L ${padding.left + chartWidth} ${height - padding.bottom} Z`;
+            
+            // Draw area
+            const area = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            area.setAttribute('d', areaData);
+            area.setAttribute('fill', 'url(#gradient)');
+            svg.appendChild(area);
+            
+            // Draw line segments (color-coded by gain/loss)
+            chapterData.forEach((d, i) => {
+                const x = padding.left + (chartWidth / (chapterData.length - 1)) * i;
+                const y = padding.top + chartHeight - ((d.value - minValue) / (maxValue - minValue)) * chartHeight;
+                
+                // Draw line segment from previous point to this point
+                if (i > 0) {
+                    const prevX = padding.left + (chartWidth / (chapterData.length - 1)) * (i - 1);
+                    const prevY = padding.top + chartHeight - ((chapterData[i - 1].value - minValue) / (maxValue - minValue)) * chartHeight;
+                    
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    line.setAttribute('d', `M ${prevX} ${prevY} L ${x} ${y}`);
+                    line.setAttribute('class', `chart-line ${d.mult >= 1 ? 'gain' : 'loss'}`);
+                    svg.appendChild(line);
+                }
+                
+                // X-axis label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', x);
+                text.setAttribute('y', height - padding.bottom + 20);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('class', 'axis-label');
+                text.textContent = d.action;
+                svg.appendChild(text);
+            });
+            
+            // Draw points
+            chapterData.forEach((d, i) => {
+                const x = padding.left + (chartWidth / (chapterData.length - 1)) * i;
+                const y = padding.top + chartHeight - ((d.value - minValue) / (maxValue - minValue)) * chartHeight;
+                
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', x);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', 5);
+                circle.setAttribute('class', 'chart-point');
+                circle.setAttribute('data-index', i);
+                
+                circle.addEventListener('mouseenter', (e) => showTooltip(e, d, i, 'chapter'));
+                circle.addEventListener('mouseleave', hideTooltip);
+                circle.addEventListener('mousemove', (e) => moveTooltip(e));
+                
+                svg.appendChild(circle);
+            });
+            
+            // Populate action list
+            const actionList = document.getElementById('action-list');
+            chapterData.forEach((d, i) => {
+                const item = document.createElement('div');
+                item.className = 'action-item';
+                item.setAttribute('data-index', i);
+                item.innerHTML = `
+                    <div class="action-number">Action ${d.action}</div>
+                    <div class="action-description">${d.desc}</div>
+                    <div class="action-multiplier ${d.mult >= 1 ? 'positive' : 'negative'}">${d.mult.toFixed(2)}x ${d.mult >= 1 ? '↑' : '↓'}</div>
+                `;
+                
+                item.addEventListener('mouseenter', () => highlightPoint(i, 'chapter'));
+                item.addEventListener('mouseleave', () => unhighlightPoint(i, 'chapter'));
+                
+                actionList.appendChild(item);
+            });
+        }
+        
+        // Draw Character Chart
+        function drawCharacterChart() {
+            const svg = document.getElementById('character-chart');
+            const tooltip = document.getElementById('character-tooltip');
+            const width = svg.clientWidth;
+            const height = svg.clientHeight;
+            const padding = { top: 30, right: 30, bottom: 40, left: 60 };
+            const chartWidth = width - padding.left - padding.right;
+            const chartHeight = height - padding.top - padding.bottom;
+            
+            const maxValue = Math.max(...characterData.map(d => d.value));
+            const minValue = 0;
+            
+            // Draw grid lines
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (chartHeight / 4) * i;
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', padding.left);
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width - padding.right);
+                line.setAttribute('y2', y);
+                line.setAttribute('class', 'grid-line');
+                svg.appendChild(line);
+                
+                // Y-axis label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', padding.left - 10);
+                text.setAttribute('y', y + 4);
+                text.setAttribute('text-anchor', 'end');
+                text.setAttribute('class', 'axis-label');
+                text.textContent = (maxValue - (maxValue / 4) * i).toFixed(0);
+                svg.appendChild(text);
+            }
+            
+            // Build area path
+            let areaData2 = '';
+            characterData.forEach((d, i) => {
+                const x = padding.left + (chartWidth / (characterData.length - 1)) * i;
+                const y = padding.top + chartHeight - (d.value / maxValue) * chartHeight;
+                
+                if (i === 0) {
+                    areaData2 = `M ${x} ${height - padding.bottom} L ${x} ${y}`;
+                } else {
+                    areaData2 += ` L ${x} ${y}`;
+                }
+            });
+            areaData2 += ` L ${padding.left + chartWidth} ${height - padding.bottom} Z`;
+            
+            // Draw area
+            const area2 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            area2.setAttribute('d', areaData2);
+            area2.setAttribute('fill', 'url(#gradient2)');
+            svg.appendChild(area2);
+            
+            // Draw line segments (color-coded by gain/loss between chapters)
+            characterData.forEach((d, i) => {
+                const x = padding.left + (chartWidth / (characterData.length - 1)) * i;
+                const y = padding.top + chartHeight - (d.value / maxValue) * chartHeight;
+                
+                // Draw line segment from previous point to this point
+                if (i > 0) {
+                    const prevX = padding.left + (chartWidth / (characterData.length - 1)) * (i - 1);
+                    const prevY = padding.top + chartHeight - (characterData[i - 1].value / maxValue) * chartHeight;
+                    
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    line.setAttribute('d', `M ${prevX} ${prevY} L ${x} ${y}`);
+                    // Color based on whether stock went up or down
+                    const isGain = d.value > characterData[i - 1].value;
+                    line.setAttribute('class', `chart-line ${isGain ? 'gain' : 'loss'}`);
+                    svg.appendChild(line);
+                }
+                
+                // X-axis labels (every 3rd)
+                if (i % 3 === 0) {
+                    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    text.setAttribute('x', x);
+                    text.setAttribute('y', height - padding.bottom + 20);
+                    text.setAttribute('text-anchor', 'middle');
+                    text.setAttribute('class', 'axis-label');
+                    text.textContent = `Ch ${d.chapter}`;
+                    svg.appendChild(text);
+                }
+            });
+            
+            // Draw points
+            characterData.forEach((d, i) => {
+                const x = padding.left + (chartWidth / (characterData.length - 1)) * i;
+                const y = padding.top + chartHeight - (d.value / maxValue) * chartHeight;
+                
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', x);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', 4);
+                circle.setAttribute('class', 'chart-point');
+                circle.setAttribute('data-index', i);
+                
+                circle.addEventListener('mouseenter', (e) => showCharacterTooltip(e, d, i));
+                circle.addEventListener('mouseleave', hideTooltip);
+                circle.addEventListener('mousemove', (e) => moveTooltip(e));
+                
+                svg.appendChild(circle);
+            });
+        }
+        
+        function showTooltip(e, data, index, type) {
+            const tooltip = document.getElementById(type + '-tooltip');
+            const label = tooltip.querySelector('.tooltip-label');
+            const multiplier = tooltip.querySelector('.tooltip-multiplier');
+            const description = tooltip.querySelector('.tooltip-description');
+            const values = tooltip.querySelectorAll('.tooltip-values span');
+            
+            label.textContent = `Action ${data.action}`;
+            multiplier.textContent = `${data.mult.toFixed(2)}x ${data.mult >= 1 ? '↑' : '↓'}`;
+            multiplier.className = `tooltip-multiplier ${data.mult >= 1 ? 'positive' : 'negative'}`;
+            description.textContent = data.desc;
+            
+            const prevValue = index > 0 ? chapterData[index - 1].value : 115.4;
+            values[0].textContent = prevValue.toFixed(1);
+            values[1].textContent = data.value.toFixed(1);
+            
+            tooltip.classList.add('visible');
+            
+            highlightPoint(index, type);
+            highlightAction(index);
+        }
+        
+        function showCharacterTooltip(e, data, index) {
+            const tooltip = document.getElementById('character-tooltip');
+            tooltip.classList.add('visible');
+            
+            const svg = document.getElementById('character-chart');
+            const points = svg.querySelectorAll('.chart-point');
+            points[index].classList.add('active');
+        }
+        
+        function hideTooltip() {
+            document.querySelectorAll('.tooltip').forEach(t => t.classList.remove('visible'));
+            document.querySelectorAll('.chart-point').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.action-item').forEach(a => a.classList.remove('highlighted'));
+        }
+        
+        function moveTooltip(e) {
+            const tooltip = e.target.closest('svg').nextElementSibling;
+            if (tooltip.classList.contains('visible')) {
+                tooltip.style.left = (e.clientX - tooltip.offsetWidth / 2) + 'px';
+                tooltip.style.top = (e.clientY - tooltip.offsetHeight - 20) + 'px';
+            }
+        }
+        
+        function highlightPoint(index, type) {
+            const svg = document.getElementById(type + '-chart');
+            const points = svg.querySelectorAll('.chart-point');
+            points[index].classList.add('active');
+        }
+        
+        function unhighlightPoint(index, type) {
+            const svg = document.getElementById(type + '-chart');
+            const points = svg.querySelectorAll('.chart-point');
+            points[index].classList.remove('active');
+        }
+        
+        function highlightAction(index) {
+            const items = document.querySelectorAll('.action-item');
+            items[index].classList.add('highlighted');
+        }
+        
+        // Initialize
+        drawChapterChart();
+        drawCharacterChart();
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>One Piece Stock Tracker - Color Palette</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #0F0F0F;
+            color: #F5F5F5;
+            padding: 40px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 48px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 40px;
+            color: #FFFFFF;
+        }
+        
+        .section {
+            margin-bottom: 60px;
+        }
+        
+        .section h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            color: #FFFFFF;
+        }
+        
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        
+        .color-card {
+            background: #1A1A1A;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #2A2A2A;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .color-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .color-swatch {
+            width: 100%;
+            height: 100px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        
+        .color-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+        
+        .color-hex {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: #71717A;
+        }
+        
+        .example-card {
+            background: linear-gradient(135deg, #1A1A1A 0%, #252525 100%);
+            border-radius: 16px;
+            border: 1px solid #2A2A2A;
+            padding: 24px;
+            margin-bottom: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .example-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4),
+                        0 0 60px rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .example-card h3 {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        
+        .stock-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 48px;
+            font-weight: 600;
+        }
+        
+        .stock-gain {
+            background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .stock-loss {
+            background: linear-gradient(135deg, #EF4444 0%, #F87171 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .change-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: 'JetBrains Mono', monospace;
+            margin-left: 12px;
+        }
+        
+        .change-positive {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10B981;
+        }
+        
+        .change-negative {
+            background: rgba(239, 68, 68, 0.1);
+            color: #EF4444;
+        }
+        
+        .button {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-size: 14px;
+        }
+        
+        .button-primary {
+            background: #FFFFFF;
+            color: #0F0F0F;
+            font-weight: 600;
+        }
+        
+        .button-primary:hover {
+            background: #F5F5F5;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(255, 255, 255, 0.2);
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #333333;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #71717A;
+            margin-bottom: 8px;
+        }
+        
+        .stat-value {
+            font-size: 32px;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', monospace;
+            color: #FFFFFF;
+        }
+        
+        /* Tooltip Styles */
+        .chart-tooltip {
+            position: relative;
+            background: linear-gradient(135deg, #252525 0%, #1A1A1A 100%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            padding: 16px;
+            max-width: 400px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6),
+                        0 0 60px rgba(255, 255, 255, 0.1);
+            margin: 20px 0;
+        }
+        
+        .tooltip-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .tooltip-action-number {
+            font-size: 12px;
+            font-weight: 600;
+            color: #71717A;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .tooltip-multiplier {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 600;
+        }
+        
+        .tooltip-multiplier.positive {
+            color: #10B981;
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+        }
+        
+        .tooltip-multiplier.negative {
+            color: #EF4444;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+        
+        .tooltip-description {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #D1D5DB;
+        }
+        
+        .tooltip-stock-values {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #9CA3AF;
+        }
+        
+        .tooltip-stock-values span {
+            font-family: 'JetBrains Mono', monospace;
+            color: #F9FAFB;
+            font-weight: 500;
+        }
+        
+        .tooltip-footer {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 11px;
+            color: #71717A;
+            font-style: italic;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>One Piece Stock Tracker Design System</h1>
+        
+        <div class="section">
+            <h2>Core Colors</h2>
+            <div class="color-grid">
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #0F0F0F;"></div>
+                    <div class="color-name">Background</div>
+                    <div class="color-hex">#0F0F0F</div>
+                </div>
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #1A1A1A;"></div>
+                    <div class="color-name">Surface</div>
+                    <div class="color-hex">#1A1A1A</div>
+                </div>
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #252525;"></div>
+                    <div class="color-name">Surface Light</div>
+                    <div class="color-hex">#252525</div>
+                </div>
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #2A2A2A;"></div>
+                    <div class="color-name">Surface Border</div>
+                    <div class="color-hex">#2A2A2A</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Accent Colors</h2>
+            <div class="color-grid">
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #FFFFFF; border: 2px solid #2A2A2A;"></div>
+                    <div class="color-name">Primary (White)</div>
+                    <div class="color-hex">#FFFFFF</div>
+                </div>
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #F5F5F5; border: 2px solid #2A2A2A;"></div>
+                    <div class="color-name">Bright (Off-White)</div>
+                    <div class="color-hex">#F5F5F5</div>
+                </div>
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #10B981;"></div>
+                    <div class="color-name">Positive (Gains)</div>
+                    <div class="color-hex">#10B981</div>
+                </div>
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #EF4444;"></div>
+                    <div class="color-name">Negative (Losses)</div>
+                    <div class="color-hex">#EF4444</div>
+                </div>
+                <div class="color-card">
+                    <div class="color-swatch" style="background: #71717A;"></div>
+                    <div class="color-name">Neutral (Gray)</div>
+                    <div class="color-hex">#71717A</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Example Components</h2>
+            
+            <div class="example-card">
+                <h3 style="margin-bottom: 16px; font-size: 20px;">Monkey D. Luffy</h3>
+                <div style="display: flex; align-items: center;">
+                    <div class="stock-value stock-gain">165.3</div>
+                    <span class="change-badge change-positive">↑ +2.8 (1.7%)</span>
+                </div>
+                <div style="margin-top: 12px; color: #A1A1AA; font-size: 14px;">
+                    Market Rank: #9 • First Appearance: Chapter 1
+                </div>
+            </div>
+            
+            <div class="example-card">
+                <h3 style="margin-bottom: 16px; font-size: 20px;">Roronoa Zoro</h3>
+                <div style="display: flex; align-items: center;">
+                    <div class="stock-value stock-loss">652.3</div>
+                    <span class="change-badge change-negative">↓ -110.6 (-14.5%)</span>
+                </div>
+                <div style="margin-top: 12px; color: #A1A1AA; font-size: 14px;">
+                    Market Rank: #1 • First Appearance: Chapter 3
+                </div>
+            </div>
+            
+            <div class="example-card">
+                <h3 style="margin-bottom: 16px; font-size: 20px;">Chapter 92 Stats</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Active Characters</div>
+                        <div class="stat-value">9</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Stock Gains</div>
+                        <div class="stat-value" style="color: #10B981;">8</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Stock Losses</div>
+                        <div class="stat-value" style="color: #EF4444;">1</div>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="button button-primary">View Chapter Details →</button>
+        </div>
+        
+        <div class="section">
+            <h2>Tooltip Examples</h2>
+            <p style="color: #A1A1AA; margin-bottom: 20px;">These appear when hovering over chart points</p>
+            
+            <h3 style="font-size: 18px; color: #A1A1AA; margin-bottom: 12px; font-family: 'Space Grotesk', sans-serif;">Chapter View Tooltip (Individual Action)</h3>
+            <div class="chart-tooltip">
+                <div class="tooltip-header">
+                    <span class="tooltip-action-number">Action 3</span>
+                    <span class="tooltip-multiplier positive">1.08x ↑</span>
+                </div>
+                <div class="tooltip-description">
+                    Luffy uses his finger shield to block Arlong's attack and bounces away from the impact, 
+                    demonstrating creativity and resourcefulness.
+                </div>
+                <div class="tooltip-stock-values">
+                    <div>Before: <span>115.4</span></div>
+                    <div>→</div>
+                    <div>After: <span>124.6</span></div>
+                </div>
+            </div>
+            
+            <h3 style="font-size: 18px; color: #A1A1AA; margin-bottom: 12px; margin-top: 32px; font-family: 'Space Grotesk', sans-serif;">Character View Tooltip (Chapter Summary)</h3>
+            <div class="chart-tooltip">
+                <div class="tooltip-header">
+                    <span class="tooltip-action-number">Chapter 92</span>
+                    <span class="tooltip-multiplier positive">2.01x ↑</span>
+                </div>
+                <div class="tooltip-description">
+                    Luffy's actions reflect combat effectiveness and emotional depth, showcasing creativity 
+                    and determination against Arlong. Strong performance with 10 impactful actions.
+                </div>
+                <div class="tooltip-stock-values">
+                    <div>Before: <span>115.4</span></div>
+                    <div>→</div>
+                    <div>After: <span>231.8</span></div>
+                </div>
+                <div class="tooltip-stock-values" style="border-top: none; margin-top: 8px; padding-top: 0;">
+                    <div>Change: <span style="color: #10B981;">+116.4 (+100.9%)</span></div>
+                    <div>Confidence: <span>0.90</span></div>
+                </div>
+                <div class="tooltip-footer">
+                    Click to view detailed chapter analysis
+                </div>
+            </div>
+            
+            <h3 style="font-size: 18px; color: #A1A1AA; margin-bottom: 12px; margin-top: 32px; font-family: 'Space Grotesk', sans-serif;">Tooltip with Loss</h3>
+            <div class="chart-tooltip">
+                <div class="tooltip-header">
+                    <span class="tooltip-action-number">Action 7</span>
+                    <span class="tooltip-multiplier negative">0.80x ↓</span>
+                </div>
+                <div class="tooltip-description">
+                    Arlong underestimates Luffy's strength as Luffy grabs the sword's blade, 
+                    preventing Arlong from moving it.
+                </div>
+                <div class="tooltip-stock-values">
+                    <div>Before: <span>2955.6</span></div>
+                    <div>→</div>
+                    <div>After: <span>2364.5</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Typography Examples</h2>
+            <div class="example-card">
+                <h1 style="font-family: 'Space Grotesk', sans-serif; font-size: 48px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 16px;">
+                    Page Title (48px) - Space Grotesk
+                </h1>
+                <h2 style="font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 16px;">
+                    Section Header (32px) - Space Grotesk
+                </h2>
+                <h3 style="font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 600; margin-bottom: 16px;">
+                    Card Title (24px) - Space Grotesk
+                </h3>
+                <p style="font-size: 16px; line-height: 1.5; color: #A1A1AA;">
+                    Body text (16px) - This is what most of the descriptive content will look like.
+                    It should be easy to read with good contrast against the dark background. System font fallback.
+                </p>
+                <p style="font-size: 14px; line-height: 1.4; color: #71717A; margin-top: 12px;">
+                    Small text (14px) - Used for secondary information and less important details.
+                </p>
+                <p style="font-family: 'JetBrains Mono', monospace; font-size: 16px; line-height: 1.5; color: #A855F7; margin-top: 12px;">
+                    Monospace (16px) - JetBrains Mono - Used for stock values and numbers: 652.3
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+

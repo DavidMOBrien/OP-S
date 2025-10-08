@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-surface-border;
+  }
+  
+  body {
+    @apply bg-background text-text-primary;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-gradient-to-br from-surface to-surface-light rounded-2xl border border-surface-border p-6 transition-all duration-300;
+  }
+  
+  .card:hover {
+    @apply -translate-y-1 shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_60px_rgba(255,255,255,0.05)] border-white/20;
+  }
+  
+  .btn-primary {
+    @apply bg-accent-primary text-background font-semibold px-6 py-3 rounded-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_10px_20px_rgba(255,255,255,0.2)];
+  }
+  
+  .btn-secondary {
+    @apply bg-surface-light text-text-primary font-medium px-6 py-3 rounded-lg border border-surface-border transition-all duration-200 hover:border-white/20 hover:bg-surface;
+  }
+}
+

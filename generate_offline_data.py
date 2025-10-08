@@ -237,10 +237,16 @@ class DataGenerator:
             print("="*80 + "\n")
         
         # Save to database
+        character_reasonings = {}  # Store chapter-level reasonings for update_stock_history
+        
         with self.db as db:
             for change in validated_changes:
                 # Extract character ID from href
                 char_id = self.crawler.extract_character_id_from_href(change['character_href'])
+                
+                # Store the chapter-level reasoning for this character
+                if 'reasoning' in change:
+                    character_reasonings[char_id] = change['reasoning']
                 
                 # Check if this is a first appearance
                 is_new = not db.character_exists(char_id)
@@ -286,26 +292,68 @@ class DataGenerator:
                     
                     current_stock = db.calculate_current_stock(char_id, chapter_id - 1)
                     
-                    # Calculate new value and delta
-                    new_stock = current_stock * multiplier
-                    delta = new_stock - current_stock
-                    
-                    db.save_market_event(
-                        chapter_id=chapter_id,
-                        character_id=char_id,
-                        character_href=change['character_href'],
-                        stock_change=delta,
-                        confidence_score=change['confidence'],
-                        description=change['reasoning'],
-                        is_first_appearance=False
-                    )
+                    # Save individual actions as market events
+                    if 'actions' in change and change['actions']:
+                        # Calculate per-action stock changes
+                        running_stock = current_stock
+                        STOCK_FLOOR = 10.0  # Minimum stock to prevent death spirals
+                        
+                        for action in change['actions']:
+                            action_multiplier = action['multiplier']
+                            new_stock = running_stock * action_multiplier
+                            
+                            # Enforce stock floor
+                            if new_stock < STOCK_FLOOR:
+                                new_stock = STOCK_FLOOR
+                                if self.verbose:
+                                    print(f"    ⚠️  {change['character_name']} hit stock floor: {new_stock:.1f}")
+                            
+                            action_delta = new_stock - running_stock
+                            
+                            db.save_market_event(
+                                chapter_id=chapter_id,
+                                character_id=char_id,
+                                character_href=change['character_href'],
+                                stock_change=action_delta,
+                                confidence_score=change['confidence'],
+                                description=action['description'],
+                                is_first_appearance=False
+                            )
+                            
+                            running_stock = new_stock
+                    else:
+                        # Fallback: no individual actions, save one event with total change
+                        STOCK_FLOOR = 10.0  # Minimum stock to prevent death spirals
+                        new_stock = current_stock * multiplier
+                        
+                        # Enforce stock floor
+                        if new_stock < STOCK_FLOOR:
+                            new_stock = STOCK_FLOOR
+                            if self.verbose:
+                                print(f"    ⚠️  {change['character_name']} hit stock floor: {new_stock:.1f}")
+                        
+                        delta = new_stock - current_stock
+                        
+                        db.save_market_event(
+                            chapter_id=chapter_id,
+                            character_id=char_id,
+                            character_href=change['character_href'],
+                            stock_change=delta,
+                            confidence_score=change['confidence'],
+                            description=change.get('reasoning', 'No description available'),
+                            is_first_appearance=False
+                        )
                     
                     # Log the change
-                    print(f"  {change['character_name']}: {current_stock:.1f} × {multiplier:.2f} = {new_stock:.1f} ({delta:+.1f})")
+                    final_stock = current_stock * multiplier
+                    if final_stock < 10.0:
+                        final_stock = 10.0
+                    delta = final_stock - current_stock
+                    print(f"  {change['character_name']}: {current_stock:.1f} × {multiplier:.2f} = {final_stock:.1f} ({delta:+.1f})")
             
-            # Update stock history
+            # Update stock history with chapter-level reasonings
             print("Updating stock history...")
-            db.update_stock_history(chapter_id)
+            db.update_stock_history(chapter_id, character_reasonings)
             
             # Save market context
             print("Saving market context...")
